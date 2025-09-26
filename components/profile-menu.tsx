@@ -29,7 +29,15 @@ export function ProfileMenu({ user, onLogout }: { user: User | null; onLogout: (
   const { switchRole } = useAuth()
   const { data: session } = useSession()
 
-  const photo = user?.avatar || session?.user?.image || "/placeholder-user.jpg"
+  // Usar cualquier imagen disponible: session, user avatar, o placeholder
+  let photo = session?.user?.image || user?.avatar || "/placeholder-user.jpg"
+  
+  // Modificar URL de Google para evitar problemas de CORS
+  if (photo && photo.includes('googleusercontent.com')) {
+    // Cambiar el tamaño y forzar descarga directa
+    photo = photo.replace(/=s\d+-c$/, '=s96-c-k-no')
+  }
+  
 
   // Si no hay usuario, mostramos un botón simple para ir a iniciar sesión
   if (!user) {
@@ -44,8 +52,22 @@ export function ProfileMenu({ user, onLogout }: { user: User | null; onLogout: (
         <SheetTrigger asChild>
           <Button variant="ghost" className="flex items-center gap-2 px-3" onClick={() => setOpen(true)}>
             <Avatar className="h-8 w-8">
-              <AvatarImage src={photo} alt={user?.name || user?.email || "Usuario"} />
-              <AvatarFallback />
+              <AvatarImage 
+                src={photo} 
+                alt={user?.name || user?.email || "Usuario"}
+                crossOrigin="anonymous"
+                referrerPolicy="no-referrer"
+onError={(e) => {
+                  // Intentar forzar la recarga sin cache
+                  const img = e.target as HTMLImageElement
+                  if (img && !img.src.includes('?nocache=')) {
+                    img.src = photo + '?nocache=' + Date.now()
+                  }
+                }}
+              />
+              <AvatarFallback className="bg-primary text-primary-foreground">
+                {(user?.name || session?.user?.name || user?.email || "U").charAt(0).toUpperCase()}
+              </AvatarFallback>
             </Avatar>
             <span className="hidden sm:inline-block">{user?.name}</span>
           </Button>
@@ -54,8 +76,22 @@ export function ProfileMenu({ user, onLogout }: { user: User | null; onLogout: (
           <div className="p-5 border-b">
             <div className="flex items-center gap-3">
               <Avatar className="h-12 w-12">
-                <AvatarImage src={photo} alt={user?.name || user?.email || "Usuario"} />
-                <AvatarFallback />
+                <AvatarImage 
+                  src={photo} 
+                  alt={user?.name || user?.email || "Usuario"}
+                  crossOrigin="anonymous"
+                  referrerPolicy="no-referrer"
+onError={(e) => {
+                    // Intentar forzar la recarga sin cache
+                    const img = e.target as HTMLImageElement
+                    if (img && !img.src.includes('?nocache=')) {
+                      img.src = photo + '?nocache=' + Date.now()
+                    }
+                  }}
+                />
+                <AvatarFallback className="text-lg font-semibold bg-primary text-primary-foreground">
+                  {(user?.name || session?.user?.name || user?.email || "U").charAt(0).toUpperCase()}
+                </AvatarFallback>
               </Avatar>
               <div className="min-w-0">
                 <SheetTitle className="truncate">{user?.name || "Invitado"}</SheetTitle>
