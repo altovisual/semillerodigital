@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { statusToKey, statusToLabel, statusToBadgeVariant } from "@/lib/classroom-status"
 import { StatusChips } from "@/components/shared/status-chips"
 import { GradeBadge } from "@/components/shared/grade-badge"
+import Link from "next/link"
 import { useSession } from "next-auth/react"
 import { NotificationCenter } from "@/components/notifications/notification-center"
 import { AdvancedReports } from "@/components/reports/advanced-reports"
@@ -111,10 +112,13 @@ const attendanceData = [
   { week: "Sem 4", attendance: 94 },
 ]
 
+type FilterType = "Todos" | "Entregado" | "Atrasado" | "Faltante"
+const FILTERS: FilterType[] = ["Todos", "Entregado", "Atrasado", "Faltante"]
+
 export function CoordinatorDashboard() {
-  const [selectedCohort, setSelectedCohort] = useState("Desarrollo Web - 2025 Q1")
-  const [selectedTeacher, setSelectedTeacher] = useState("juan")
-  const [activeFilter, setActiveFilter] = useState("Todos")
+  const [selectedCohort, setSelectedCohort] = useState("")
+  const [selectedTeacher, setSelectedTeacher] = useState("")
+  const [activeFilter, setActiveFilter] = useState<FilterType>("Todos")
   const [activeTab, setActiveTab] = useState("overview")
   const [profileOpen, setProfileOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
@@ -123,7 +127,7 @@ export function CoordinatorDashboard() {
   const { data: session, status: sessionStatus } = useSession()
 
   // Classroom live data state
-  const [gcCourses, setGcCourses] = useState<Array<{ id?: string | null; name?: string | null }>>([])
+  const [gcCourses, setGcCourses] = useState<Array<{ id?: string | null; name?: string | null; section?: string | null; ownerId?: string | null }>>([])
   const [gcSelectedCourseId, setGcSelectedCourseId] = useState<string>("")
   const [gcStudents, setGcStudents] = useState<Array<{ userId?: string | null; profile?: { id?: string | null; name?: string | null; email?: string | null; photoUrl?: string | null } }>>([])
   const [gcLoading, setGcLoading] = useState(false)
@@ -132,6 +136,13 @@ export function CoordinatorDashboard() {
   const [gcSelectedWorkId, setGcSelectedWorkId] = useState<string>("")
   const [gcSubmissions, setGcSubmissions] = useState<Array<{ id?: string | null; userId?: string | null; state?: string | null; late?: boolean | null; assignedGrade?: number | null; alternateLink?: string | null; updateTime?: string | null }>>([])
   const [gcAllSubmissions, setGcAllSubmissions] = useState<Record<string, Array<{ userId?: string | null; state?: string | null; late?: boolean | null }>>>({})
+  const cohortOptions = gcCourses
+    .filter((c) => !selectedTeacher || (c.ownerId ? c.ownerId === selectedTeacher : true))
+    .map((c) => ({
+      id: String(c.id || ""),
+      label: `${c.name || c.id}${c.section ? ` - ${c.section}` : ""}`,
+    }))
+  const [gcTeachers, setGcTeachers] = useState<Array<{ userId?: string | null; profile?: { name?: string | null; email?: string | null } }>>([])
 
   // Load Classroom courses helper
   const reloadCourses = async () => {
@@ -171,6 +182,14 @@ export function CoordinatorDashboard() {
       try {
         setGcLoading(true)
         setGcError(null)
+        // teachers
+        const tResp = await fetch(`/api/classroom/courses/${gcSelectedCourseId}/teachers`).catch(() => null)
+        if (tResp && tResp.ok) {
+          const tData = await tResp.json()
+          setGcTeachers(tData.teachers || [])
+        } else {
+          setGcTeachers([])
+        }
         const resp = await fetch(`/api/classroom/courses/${gcSelectedCourseId}/students`)
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
         const data = await resp.json()
@@ -441,6 +460,49 @@ export function CoordinatorDashboard() {
                       <StatusChips items={gcSubmissions.map((s) => ({ state: s.state, late: s.late }))} className="mt-2" />
                     )}
 
+                    {/* Filtros de Cohorte/Profesor/Estado */}
+                    <div className="flex flex-wrap items-center gap-3 mb-3">
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium">Cohorte:</label>
+                        <Select value={gcSelectedCourseId} onValueChange={(v) => { setGcSelectedCourseId(v); setSelectedCohort(v) }}>
+                          <SelectTrigger className="w-64">
+                            <SelectValue placeholder="Seleccionar cohorte" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {cohortOptions.map((o) => (
+                              <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {/* Profesor desde API */}
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium">Profesor:</label>
+                        <Select value={selectedTeacher} onValueChange={setSelectedTeacher}>
+                          <SelectTrigger className="w-64">
+                            <SelectValue placeholder={gcTeachers.length > 0 ? "Seleccionar profesor" : "No disponible"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {gcTeachers.map((t, idx) => (
+                              <SelectItem key={t.userId || String(idx)} value={t.userId || String(idx)}>
+                                {t.profile?.name || t.profile?.email || t.userId}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium">Estado:</label>
+                        <div className="flex items-center gap-2">
+                          {FILTERS.map((f) => (
+                            <Button key={f} variant={activeFilter === f ? "default" : "outline"} size="sm" onClick={() => setActiveFilter(f)}>
+                              {f}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
@@ -467,48 +529,65 @@ export function CoordinatorDashboard() {
                               </TableCell>
                             </TableRow>
                           ) : (
-                            gcSubmissions.map((sub, idx) => {
-                              const student = gcStudents.find((s) => s.userId === sub.userId)
-                              const name = student?.profile?.name || sub.userId || "-"
-                              const email = student?.profile?.email || "-"
-                              const key = statusToKey(sub.state, sub.late)
-                              const label = statusToLabel(key)
-                              const variant = statusToBadgeVariant(key)
-                              return (
-                                <TableRow key={sub.id || `${sub.userId || "u"}-${idx}`}>
-                                  <TableCell>{name}</TableCell>
-                                  <TableCell><span className="text-sm text-muted-foreground">{email}</span></TableCell>
+                            (() => {
+                              const work = gcCoursework.find((w) => String(w.id) === String(gcSelectedWorkId)) as any
+                              const rows = gcStudents.map((stu, idx) => {
+                                const sub = gcSubmissions.find((s) => s.userId === stu.userId)
+                                const state = sub?.state || "NO_SUBMISSION"
+                                const late = sub?.late || false
+                                const key = statusToKey(state, late)
+                                const label = statusToLabel(key)
+                                const variant = statusToBadgeVariant(key)
+                                return {
+                                  key: sub?.id || `${stu.userId || "u"}-${idx}`,
+                                  name: stu.profile?.name || stu.userId || "-",
+                                  email: stu.profile?.email || "-",
+                                  state,
+                                  late,
+                                  label,
+                                  variant,
+                                  assignedGrade: sub?.assignedGrade ?? null,
+                                  link: sub?.alternateLink || null,
+                                  work,
+                                }
+                              })
+
+                              const filtered = rows.filter((r) => {
+                                if (activeFilter === "Todos") return true
+                                if (activeFilter === "Entregado") return r.state === "TURNED_IN" || r.state === "RETURNED"
+                                if (activeFilter === "Atrasado") return !!r.late
+                                if (activeFilter === "Faltante") return r.state === "NO_SUBMISSION"
+                                return true
+                              })
+
+                              return filtered.map((r) => (
+                                <TableRow key={r.key}>
+                                  <TableCell>{r.name}</TableCell>
+                                  <TableCell><span className="text-sm text-muted-foreground">{r.email}</span></TableCell>
                                   <TableCell>
-                                    <span className={`inline-flex items-center px-2 py-1 rounded border text-xs ${variant === "default" ? "bg-primary text-primary-foreground border-transparent" : variant === "destructive" ? "text-destructive border-destructive/40" : "text-muted-foreground border-border"}`}>
-                                      {label}
+                                    <span className={`inline-flex items-center px-2 py-1 rounded border text-xs ${r.variant === "default" ? "bg-primary text-primary-foreground border-transparent" : r.variant === "destructive" ? "text-destructive border-destructive/40" : "text-muted-foreground border-border"}`}>
+                                      {r.label}
                                     </span>
                                   </TableCell>
-                                  <TableCell>{sub.late ? "Sí" : "No"}</TableCell>
+                                  <TableCell>{r.late ? "Sí" : "No"}</TableCell>
                                   <TableCell>
-                                    {(() => {
-                                      const work = gcCoursework.find((w) => String(w.id) === String(gcSelectedWorkId)) as any
-                                      return <GradeBadge assigned={sub.assignedGrade ?? null} maxPoints={(work?.maxPoints as number | null) ?? null} />
-                                    })()}
+                                    <GradeBadge assigned={r.assignedGrade} maxPoints={(r.work?.maxPoints as number | null) ?? null} />
                                   </TableCell>
                                   <TableCell>
-                                    {sub.alternateLink ? (
-                                      <a
-                                        href={sub.alternateLink}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-primary underline"
-                                        title="Abrir en Classroom"
-                                        aria-label="Abrir entrega en Google Classroom (nueva pestaña)"
-                                      >
-                                        Abrir
-                                      </a>
-                                    ) : (
-                                      <span className="text-sm text-muted-foreground">-</span>
-                                    )}
+                                    <div className="flex items-center gap-3">
+                                      {r.link ? (
+                                        <a href={r.link} target="_blank" rel="noreferrer" className="text-primary underline" title="Abrir en Classroom" aria-label="Abrir entrega en Google Classroom (nueva pestaña)">Abrir</a>
+                                      ) : (
+                                        <span className="text-sm text-muted-foreground">-</span>
+                                      )}
+                                      {gcSelectedCourseId && gcSelectedWorkId && (
+                                        <Link href={`/classroom/tasks/${gcSelectedCourseId}/${gcSelectedWorkId}`} className="text-sm underline">Ver detalle</Link>
+                                      )}
+                                    </div>
                                   </TableCell>
                                 </TableRow>
-                              )
-                            })
+                              ))
+                            })()
                           )}
                         </TableBody>
                       </Table>

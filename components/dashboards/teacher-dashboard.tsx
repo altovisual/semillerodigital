@@ -18,6 +18,7 @@ import { useSession } from "next-auth/react"
 import { statusToKey, statusToLabel, statusToBadgeVariant } from "@/lib/classroom-status"
 import { StatusChips } from "@/components/shared/status-chips"
 import { GradeBadge } from "@/components/shared/grade-badge"
+import Link from "next/link"
 import { NotificationCenter } from "@/components/notifications/notification-center"
 import { CalendarIntegration } from "@/components/calendar/calendar-integration"
 import {
@@ -464,11 +465,18 @@ export function TeacherDashboard() {
                                     })()}
                                   </TableCell>
                                   <TableCell>
-                                    {sub.alternateLink ? (
-                                      <a href={sub.alternateLink} target="_blank" rel="noreferrer" className="text-primary underline">Abrir</a>
-                                    ) : (
-                                      <span className="text-sm text-muted-foreground">-</span>
-                                    )}
+                                    <div className="flex items-center gap-3">
+                                      {sub.alternateLink ? (
+                                        <a href={sub.alternateLink} target="_blank" rel="noreferrer" className="text-primary underline">Abrir</a>
+                                      ) : (
+                                        <span className="text-sm text-muted-foreground">-</span>
+                                      )}
+                                      {gcSelectedCourseId && gcSelectedWorkId && (
+                                        <Link href={`/classroom/tasks/${gcSelectedCourseId}/${gcSelectedWorkId}`} className="text-sm underline">
+                                          Ver detalle
+                                        </Link>
+                                      )}
+                                    </div>
                                   </TableCell>
                                 </TableRow>
                               )

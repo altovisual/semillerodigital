@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { GraduationCap, LogOut, User, Bell, Calendar, Clock, CheckCircle, AlertCircle, XCircle } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -215,6 +216,7 @@ export function StudentDashboard() {
   type UiTask = {
     id: string
     title: string
+    courseId?: string
     courseName?: string
     dueDate?: string
     state?: string | null
@@ -226,6 +228,7 @@ export function StudentDashboard() {
   const uiTasks: UiTask[] = gcMyTasks.map((t) => ({
     id: String(t.id),
     title: t.title,
+    courseId: t.courseId,
     courseName: t.courseName,
     dueDate: t.dueDate,
     state: t.state,
@@ -424,15 +427,16 @@ export function StudentDashboard() {
                         </Badge>
                       )
                     })()}
-                    {task.alternateLink ? (
-                      <Button variant="ghost" size="sm" asChild aria-label={`Abrir en Classroom: ${task.title}`}>
-                        <a href={task.alternateLink} target="_blank" rel="noreferrer">Abrir en Classroom</a>
+                    <div className="flex items-center gap-2">
+                      {task.alternateLink && (
+                        <Button variant="ghost" size="sm" asChild aria-label={`Abrir en Classroom: ${task.title}`}>
+                          <a href={task.alternateLink} target="_blank" rel="noreferrer">Abrir en Classroom</a>
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" asChild aria-label={`Ver detalle de ${task.title}`}>
+                        <Link href={`/classroom/tasks/${task.courseId}/${task.id}`}>Ver detalle</Link>
                       </Button>
-                    ) : (
-                      <Button variant="ghost" size="sm" onClick={() => handleViewTask(task.id as string)} aria-label={`Ver tarea ${task.title}`}>
-                        Ver
-                      </Button>
-                    )}
+                    </div>
                   </div>
                 </div>
               ))}
