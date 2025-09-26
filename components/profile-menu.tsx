@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { LogOut, User as UserIcon, Bell, HelpCircle, BarChart3, Plug, Settings, Palette, Calendar } from "lucide-react"
+import { LogOut, User as UserIcon, HelpCircle, BarChart3, Plug, Settings, Palette, Calendar } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { User } from "@/contexts/auth-context"
 import { useAuth } from "@/contexts/auth-context"
@@ -98,9 +98,6 @@ export function ProfileMenu({ user, onLogout }: { user: User | null; onLogout: (
               <>
                 <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/settings") }}>
                   <Settings className="mr-2 h-4 w-4" /> Ajustes
-                </Button>
-                <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/notifications") }}>
-                  <Bell className="mr-2 h-4 w-4" /> Notificaciones
                 </Button>
 
                 <div className="px-3 py-2 mt-2 text-xs uppercase tracking-wide text-muted-foreground">Herramientas</div>
