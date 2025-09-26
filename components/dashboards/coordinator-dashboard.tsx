@@ -16,7 +16,6 @@ import { useAuth } from "@/contexts/auth-context"
 import { statusToKey, statusToLabel, statusToBadgeVariant } from "@/lib/classroom-status"
 import { StatusChips } from "@/components/shared/status-chips"
 import { GradeBadge } from "@/components/shared/grade-badge"
-import Link from "next/link"
 import { useSession } from "next-auth/react"
 import { NotificationCenter } from "@/components/notifications/notification-center"
 import { AdvancedReports } from "@/components/reports/advanced-reports"
@@ -114,8 +113,8 @@ const attendanceData = [
   { week: "Sem 4", attendance: 94 },
 ]
 
-type FilterType = "Todos" | "Entregado" | "Atrasado" | "Faltante"
-const FILTERS: FilterType[] = ["Todos", "Entregado", "Atrasado", "Faltante"]
+type FilterType = "Todos" | "Entregado" | "Atrasado" | "Faltante" | "Pendiente"
+const FILTERS: FilterType[] = ["Todos", "Entregado", "Atrasado", "Faltante", "Pendiente"]
 
 export function CoordinatorDashboard() {
   const [selectedCohort, setSelectedCohort] = useState("")
@@ -138,7 +137,13 @@ export function CoordinatorDashboard() {
   const [gcCoursework, setGcCoursework] = useState<Array<{ id?: string | null; title?: string | null; maxPoints?: number | null }>>([])
   const [gcSelectedWorkId, setGcSelectedWorkId] = useState<string>("")
   const [gcSubmissions, setGcSubmissions] = useState<Array<{ id?: string | null; userId?: string | null; state?: string | null; late?: boolean | null; assignedGrade?: number | null; alternateLink?: string | null; updateTime?: string | null }>>([])
-  const [gcAllSubmissions, setGcAllSubmissions] = useState<Record<string, Array<{ userId?: string | null; state?: string | null; late?: boolean | null }>>>({})
+  const [gcAllSubmissions, setGcAllSubmissions] = useState<Record<string, Array<{ userId?: string | null; state?: string | null; late?: boolean | null }>>>({});
+  
+  // Paginación
+  const [subPage, setSubPage] = useState<number>(1)
+  const [stuPage, setStuPage] = useState<number>(1)
+  const pageSize = 20
+  
   const cohortOptions = gcCourses
     .filter((c) => !selectedTeacher || (c.ownerId ? c.ownerId === selectedTeacher : true))
     .map((c) => ({
@@ -146,6 +151,22 @@ export function CoordinatorDashboard() {
       label: `${c.name || c.id}${c.section ? ` - ${c.section}` : ""}`,
     }))
   const [gcTeachers, setGcTeachers] = useState<Array<{ userId?: string | null; profile?: { name?: string | null; email?: string | null } }>>([])
+
+  // Derivados de paginación (entregas)
+  const totalSubs = gcSubmissions.length
+  const totalSubPages = Math.max(1, Math.ceil((totalSubs || 0) / pageSize))
+  const safeSubPage = Math.min(Math.max(1, subPage), totalSubPages)
+  const subStart = (safeSubPage - 1) * pageSize
+  const subEnd = Math.min(subStart + pageSize, totalSubs)
+  const paginatedSubs = gcSubmissions.slice(subStart, subEnd)
+
+  // Derivados de paginación (estudiantes)
+  const totalStudents = gcStudents.length
+  const totalStuPages = Math.max(1, Math.ceil((totalStudents || 0) / pageSize))
+  const safeStuPage = Math.min(Math.max(1, stuPage), totalStuPages)
+  const stuStart = (safeStuPage - 1) * pageSize
+  const stuEnd = Math.min(stuStart + pageSize, totalStudents)
+  const paginatedStudents = gcStudents.slice(stuStart, stuEnd)
 
   // Load Classroom courses helper
   const reloadCourses = async () => {
@@ -250,6 +271,10 @@ export function CoordinatorDashboard() {
     loadSubmissions()
   }, [gcSelectedCourseId, gcSelectedWorkId])
 
+  // Reset de página al cambiar filtros clave
+  useEffect(() => { setSubPage(1) }, [gcSelectedWorkId, gcSelectedCourseId])
+  useEffect(() => { setStuPage(1) }, [gcSelectedCourseId])
+
   const handleSendNotification = async (studentId: number) => {
     console.log("[v0] Sending notification to student:", studentId)
 
@@ -268,9 +293,17 @@ export function CoordinatorDashboard() {
     }
   }
 
-  const handleViewDetails = (studentId: number) => {
-    console.log("[v0] Viewing details for student:", studentId)
-    router.push(`/students/${studentId}`)
+  const handleViewStudentProfile = (userId: string, email: string) => {
+    if (!gcSelectedCourseId || !userId) {
+      console.warn("No se puede abrir el perfil: falta courseId o userId")
+      return
+    }
+    
+    // URL para ver el perfil del estudiante en Google Classroom
+    const classroomProfileUrl = `https://classroom.google.com/c/${gcSelectedCourseId}/p/${userId}`
+    
+    // Abrir en nueva pestaña
+    window.open(classroomProfileUrl, '_blank', 'noopener,noreferrer')
   }
 
   const filteredStudents = studentData.filter((student) => {
@@ -278,8 +311,14 @@ export function CoordinatorDashboard() {
     if (activeFilter === "Entregado" && student.missing > 0) return false
     if (activeFilter === "Atrasado" && student.late === 0) return false
     if (activeFilter === "Faltante" && student.missing === 0) return false
+    if (activeFilter === "Pendiente" && (student.missing === 0 && student.late === 0)) return false
     return true
   });
+
+  // Mostrar skeleton durante la carga inicial
+  if (!bootstrapped || sessionStatus === "loading") {
+    return <FullPageSkeleton />
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -343,6 +382,9 @@ export function CoordinatorDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-balance">Classroom (en vivo)</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Haz click en cualquier fila de alumno para ver su perfil en Google Classroom
+                </p>
               </CardHeader>
               <CardContent className="space-y-4">
                 {sessionStatus !== "authenticated" ? (
@@ -412,22 +454,42 @@ export function CoordinatorDashboard() {
                               </TableCell>
                             </TableRow>
                           ) : (
-                            gcStudents.map((s, idx) => (
-                              <TableRow key={s.userId || s.profile?.email || s.profile?.id || idx}>
-                                <TableCell>
-                                  <div className="flex items-center gap-3">
-                                    <UserAvatar name={s.profile?.name || s.userId || ""} email={s.profile?.email || ""} photoUrl={s.profile?.photoUrl || null} size={32} />
-                                    <span className="font-medium">{s.profile?.name || s.userId}</span>
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <span className="text-sm text-muted-foreground">{s.profile?.email || "-"}</span>
-                                </TableCell>
-                              </TableRow>
-                            ))
+                            paginatedStudents.map((s, idx) => {
+                              const fullName = s.profile?.name || s.userId || ""
+                              const email = s.profile?.email || ""
+                              return (
+                                <TableRow 
+                                  key={s.userId || s.profile?.email || s.profile?.id || idx}
+                                  className="cursor-pointer hover:bg-accent/50 transition-colors"
+                                  onClick={() => handleViewStudentProfile(s.userId || "", email)}
+                                  title={`Ver perfil de ${fullName} en Google Classroom`}
+                                >
+                                  <TableCell>
+                                    <div className="flex items-center gap-3">
+                                      <UserAvatar name={fullName} email={email} photoUrl={s.profile?.photoUrl || null} size={32} />
+                                      <span className="font-medium">{fullName}</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className="text-sm text-muted-foreground">{email}</span>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })
                           )}
                         </TableBody>
                       </Table>
+                      {/* Paginación de estudiantes */}
+                      {totalStudents > pageSize && (
+                        <div className="mt-4 flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Mostrando {stuStart + 1}–{stuEnd} de {totalStudents}</span>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" disabled={safeStuPage <= 1} onClick={() => setStuPage((p: number) => Math.max(1, p - 1))}>Anterior</Button>
+                            <span className="text-sm">Página {safeStuPage} / {totalStuPages}</span>
+                            <Button variant="outline" size="sm" disabled={safeStuPage >= totalStuPages} onClick={() => setStuPage((p: number) => Math.min(totalStuPages, p + 1))}>Siguiente</Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Coursework and submissions */}
@@ -457,46 +519,84 @@ export function CoordinatorDashboard() {
                       <StatusChips items={gcSubmissions.map((s) => ({ state: s.state, late: s.late }))} className="mt-2" />
                     )}
 
-                    {/* Filtros de Cohorte/Profesor/Estado */}
-                    <div className="flex flex-wrap items-center gap-3 mb-3">
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium">Cohorte:</label>
-                        <Select value={gcSelectedCourseId} onValueChange={(v) => { setGcSelectedCourseId(v); setSelectedCohort(v) }}>
-                          <SelectTrigger className="w-64">
-                            <SelectValue placeholder="Seleccionar cohorte" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {cohortOptions.map((o) => (
-                              <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                    {/* Filtros Mejorados - Responsive */}
+                    <div className="bg-card/50 rounded-lg border p-4 space-y-4 mb-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-4 w-1 bg-primary rounded-full"></div>
+                        <h3 className="text-sm font-semibold text-foreground">Filtros de Búsqueda</h3>
                       </div>
-                      {/* Profesor desde API */}
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium">Profesor:</label>
-                        <Select value={selectedTeacher} onValueChange={setSelectedTeacher}>
-                          <SelectTrigger className="w-64">
-                            <SelectValue placeholder={gcTeachers.length > 0 ? "Seleccionar profesor" : "No disponible"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {gcTeachers.map((t, idx) => (
-                              <SelectItem key={t.userId || String(idx)} value={t.userId || String(idx)}>
-                                {t.profile?.name || t.profile?.email || t.userId}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium">Estado:</label>
-                        <div className="flex items-center gap-2">
-                          {FILTERS.map((f) => (
-                            <Button key={f} variant={activeFilter === f ? "default" : "outline"} size="sm" onClick={() => setActiveFilter(f)}>
-                              {f}
-                            </Button>
-                          ))}
+                      
+                      {/* Filtros de Selección */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Cohorte</label>
+                          <Select value={gcSelectedCourseId} onValueChange={(v) => { setGcSelectedCourseId(v); setSelectedCohort(v) }}>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Seleccionar cohorte" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {cohortOptions.map((o) => (
+                                <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
+                        
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Profesor</label>
+                          <Select value={selectedTeacher} onValueChange={setSelectedTeacher}>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder={gcTeachers.length > 0 ? "Seleccionar profesor" : "No disponible"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {gcTeachers.map((t, idx) => (
+                                <SelectItem key={t.userId || String(idx)} value={t.userId || String(idx)}>
+                                  {t.profile?.name || t.profile?.email || t.userId}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Estado de Entregas</label>
+                          <div className="flex flex-wrap gap-2">
+                            {FILTERS.map((f) => (
+                              <Button 
+                                key={f} 
+                                variant={activeFilter === f ? "default" : "outline"} 
+                                size="sm" 
+                                onClick={() => setActiveFilter(f)}
+                                className="text-xs px-3 py-1.5 h-auto"
+                              >
+                                {f}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Indicador de Filtros Activos */}
+                      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/50">
+                        <span className="text-xs text-muted-foreground">Filtros activos:</span>
+                        {gcSelectedCourseId && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-primary text-xs">
+                            Cohorte: {cohortOptions.find(o => o.id === gcSelectedCourseId)?.label || 'Seleccionado'}
+                          </span>
+                        )}
+                        {selectedTeacher && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 text-xs">
+                            Profesor: {gcTeachers.find(t => t.userId === selectedTeacher)?.profile?.name || 'Seleccionado'}
+                          </span>
+                        )}
+                        {activeFilter !== "Todos" && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-500/10 text-green-600 text-xs">
+                            Estado: {activeFilter}
+                          </span>
+                        )}
+                        {(!gcSelectedCourseId && !selectedTeacher && activeFilter === "Todos") && (
+                          <span className="text-xs text-muted-foreground italic">Ninguno</span>
+                        )}
                       </div>
                     </div>
 
@@ -554,10 +654,19 @@ export function CoordinatorDashboard() {
                                 if (activeFilter === "Entregado") return r.state === "TURNED_IN" || r.state === "RETURNED"
                                 if (activeFilter === "Atrasado") return !!r.late
                                 if (activeFilter === "Faltante") return r.state === "NO_SUBMISSION"
+                                if (activeFilter === "Pendiente") return r.state !== "TURNED_IN" && r.state !== "RETURNED" && r.state !== "NO_SUBMISSION"
                                 return true
                               })
 
-                              return filtered.map((r) => (
+                              // Aplicar paginación a los resultados filtrados
+                              const totalFilteredSubs = filtered.length
+                              const totalFilteredSubPages = Math.max(1, Math.ceil(totalFilteredSubs / pageSize))
+                              const safeFilteredSubPage = Math.min(Math.max(1, subPage), totalFilteredSubPages)
+                              const filteredSubStart = (safeFilteredSubPage - 1) * pageSize
+                              const filteredSubEnd = Math.min(filteredSubStart + pageSize, totalFilteredSubs)
+                              const paginatedFiltered = filtered.slice(filteredSubStart, filteredSubEnd)
+
+                              return paginatedFiltered.map((r) => (
                                 <TableRow key={r.key}>
                                   <TableCell>{r.name}</TableCell>
                                   <TableCell><span className="text-sm text-muted-foreground">{r.email}</span></TableCell>
@@ -577,9 +686,6 @@ export function CoordinatorDashboard() {
                                       ) : (
                                         <span className="text-sm text-muted-foreground">-</span>
                                       )}
-                                      {gcSelectedCourseId && gcSelectedWorkId && (
-                                        <Link href={`/classroom/tasks/${gcSelectedCourseId}/${gcSelectedWorkId}`} className="text-sm underline">Ver detalle</Link>
-                                      )}
                                     </div>
                                   </TableCell>
                                 </TableRow>
@@ -588,6 +694,40 @@ export function CoordinatorDashboard() {
                           )}
                         </TableBody>
                       </Table>
+                      {/* Paginación de entregas */}
+                      {(() => {
+                        const work = gcCoursework.find((w) => String(w.id) === String(gcSelectedWorkId)) as any
+                        const rows = gcStudents.map((stu, idx) => {
+                          const sub = gcSubmissions.find((s) => s.userId === stu.userId)
+                          const state = sub?.state || "NO_SUBMISSION"
+                          const late = sub?.late || false
+                          return { state, late }
+                        })
+                        const filtered = rows.filter((r) => {
+                          if (activeFilter === "Todos") return true
+                          if (activeFilter === "Entregado") return r.state === "TURNED_IN" || r.state === "RETURNED"
+                          if (activeFilter === "Atrasado") return !!r.late
+                          if (activeFilter === "Faltante") return r.state === "NO_SUBMISSION"
+                          if (activeFilter === "Pendiente") return r.state !== "TURNED_IN" && r.state !== "RETURNED" && r.state !== "NO_SUBMISSION"
+                          return true
+                        })
+                        const totalFilteredSubs = filtered.length
+                        const totalFilteredSubPages = Math.max(1, Math.ceil(totalFilteredSubs / pageSize))
+                        const safeFilteredSubPage = Math.min(Math.max(1, subPage), totalFilteredSubPages)
+                        const filteredSubStart = (safeFilteredSubPage - 1) * pageSize
+                        const filteredSubEnd = Math.min(filteredSubStart + pageSize, totalFilteredSubs)
+                        
+                        return totalFilteredSubs > pageSize ? (
+                          <div className="mt-4 flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Mostrando {filteredSubStart + 1}–{filteredSubEnd} de {totalFilteredSubs}</span>
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="sm" disabled={safeFilteredSubPage <= 1} onClick={() => setSubPage((p: number) => Math.max(1, p - 1))}>Anterior</Button>
+                              <span className="text-sm">Página {safeFilteredSubPage} / {totalFilteredSubPages}</span>
+                              <Button variant="outline" size="sm" disabled={safeFilteredSubPage >= totalFilteredSubPages} onClick={() => setSubPage((p: number) => Math.min(totalFilteredSubPages, p + 1))}>Siguiente</Button>
+                            </div>
+                          </div>
+                        ) : null
+                      })()}
                     </div>
                   </>
                 )}
@@ -639,6 +779,9 @@ export function CoordinatorDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-balance">Seguimiento de Progreso de Alumnos</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Haz click en cualquier fila para ver el perfil del alumno en Google Classroom
+                </p>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -660,7 +803,7 @@ export function CoordinatorDashboard() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      gcStudents.map((s) => {
+                      paginatedStudents.map((s) => {
                         const fullName = s.profile?.name || s.userId || "-"
                         const email = s.profile?.email || "-"
                         const totalWorks = gcCoursework.length || 0
@@ -682,7 +825,12 @@ export function CoordinatorDashboard() {
                         }
                         const pct = totalWorks > 0 ? Math.round((completed / totalWorks) * 100) : 0
                         return (
-                          <TableRow key={s.userId || email}>
+                          <TableRow 
+                            key={s.userId || email}
+                            className="cursor-pointer hover:bg-accent/50 transition-colors"
+                            onClick={() => handleViewStudentProfile(s.userId || "", email)}
+                            title={`Ver perfil de ${fullName} en Google Classroom`}
+                          >
                             <TableCell>
                               <div className="flex items-center gap-3">
                                 <UserAvatar name={fullName} email={email} photoUrl={s.profile?.photoUrl || null} size={32} />
@@ -707,6 +855,17 @@ export function CoordinatorDashboard() {
                     )}
                   </TableBody>
                 </Table>
+                {/* Paginación de estudiantes (progreso) */}
+                {totalStudents > pageSize && (
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Mostrando {stuStart + 1}–{stuEnd} de {totalStudents}</span>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" disabled={safeStuPage <= 1} onClick={() => setStuPage((p: number) => Math.max(1, p - 1))}>Anterior</Button>
+                      <span className="text-sm">Página {safeStuPage} / {totalStuPages}</span>
+                      <Button variant="outline" size="sm" disabled={safeStuPage >= totalStuPages} onClick={() => setStuPage((p: number) => Math.min(totalStuPages, p + 1))}>Siguiente</Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
             {/* Quick Reports */}

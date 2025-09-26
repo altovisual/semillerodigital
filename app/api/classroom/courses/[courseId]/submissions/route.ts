@@ -7,7 +7,6 @@ export async function GET(
   { params }: { params: { courseId: string } }
 ) {
   try {
-    const { classroom } = await getClassroomClient()
     const { courseId } = params
 
     const { searchParams } = new URL(req.url)
@@ -16,6 +15,30 @@ export async function GET(
     if (!courseworkId) {
       return NextResponse.json({ error: "Missing courseworkId" }, { status: 400 })
     }
+
+    if (process.env.MOCK_MODE === "true") {
+      const { searchParams } = new URL(req.url)
+      const courseworkId = searchParams.get("courseworkId") || undefined
+      const userId = searchParams.get("userId") || undefined
+      if (!courseworkId) {
+        return NextResponse.json({ error: "Missing courseworkId" }, { status: 400 })
+      }
+      const students = Array.from({ length: 144 }).map((_, i) => `s${i + 1}`)
+      const pool = userId ? students.filter((s) => s === userId) : students
+      const states = ["TURNED_IN", "RETURNED", "NO_SUBMISSION", "PENDING"]
+      const submissions = pool.map((uid, i) => ({
+        id: `${courseworkId}-${uid}`,
+        state: states[i % states.length],
+        assignedGrade: i % 3 === 0 ? Math.max(50, 95 - (i % 40)) : null,
+        alternateLink: "https://classroom.google.com",
+        late: i % 4 === 2,
+        updateTime: new Date().toISOString(),
+        userId: uid,
+      }))
+      return NextResponse.json({ courseId, courseworkId, submissions })
+    }
+
+    const { classroom } = await getClassroomClient()
 
     const res = await classroom.courses.courseWork.studentSubmissions.list({
       courseId,

@@ -3,6 +3,31 @@ import { getClassroomClient } from "@/lib/google-client"
 
 export async function GET() {
   try {
+    // Mock mode: return fake courses without calling Google
+    if (process.env.MOCK_MODE === "true") {
+      const teacherIds = Array.from({ length: 20 }).map((_, i) => `t${i + 1}`)
+      const names = [
+        "Curso Demo Semillero Vibeathon",
+        "Diseño UX/UI - 2025 Q1",
+        "Desarrollo Web - 2025 Q1",
+        "Data Science - 2025 Q1",
+        "Marketing Digital - 2025 Q1",
+        "QA Automation - 2025 Q1",
+      ]
+      const courses = names.map((n, i) => ({
+        id: `course-${i + 1}`,
+        name: n,
+        section: String.fromCharCode(65 + (i % 4)),
+        enrollmentCode: `CODE${100 + i}`,
+        courseState: "ACTIVE",
+        ownerId: teacherIds[i % teacherIds.length],
+      }))
+      return NextResponse.json(
+        { email: "mock@student@example.com", courses },
+        { headers: { "Cache-Control": "public, max-age=5" } },
+      )
+    }
+
     const { classroom, session } = await getClassroomClient()
 
     // Helper to list all pages

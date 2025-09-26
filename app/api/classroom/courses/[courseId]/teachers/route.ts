@@ -6,8 +6,22 @@ export async function GET(
   { params }: { params: { courseId: string } }
 ) {
   try {
-    const { classroom } = await getClassroomClient()
     const { courseId } = params
+
+    if (process.env.MOCK_MODE === "true") {
+      const teachers = Array.from({ length: 20 }).map((_, i) => ({
+        userId: `t${i + 1}`,
+        profile: {
+          id: `t${i + 1}`,
+          name: `Profesor ${i + 1}`,
+          email: `teacher${i + 1}@example.com`,
+          photoUrl: undefined,
+        },
+      }))
+      return NextResponse.json({ courseId, teachers })
+    }
+
+    const { classroom } = await getClassroomClient()
 
     const res = await classroom.courses.teachers.list({ courseId })
     const teachers = (res.data.teachers || []).map((t) => ({

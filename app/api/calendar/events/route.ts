@@ -5,6 +5,18 @@ import { authOptions } from "@/lib/auth-options"
 
 export async function GET(req: Request) {
   try {
+    if (process.env.MOCK_MODE === "true") {
+      const now = new Date()
+      const mk = (days: number, h: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000).setHours(h, 0, 0, 0)
+      const toISO = (ms: number) => new Date(ms).toISOString()
+      const events = [
+        { id: "ev-1", summary: "Clase: Introducción", start: toISO(mk(1, 9)), end: toISO(mk(1, 11)), location: "Aula 101", hangoutLink: "https://meet.google.com/abc-defg-hij" },
+        { id: "ev-2", summary: "Workshop: Prototipos", start: toISO(mk(3, 14)), end: toISO(mk(3, 16)), location: "Remoto", hangoutLink: "https://meet.google.com/xyz-abcd-uvw" },
+        { id: "ev-3", summary: "Revisión de proyecto", start: toISO(mk(5, 10)), end: toISO(mk(5, 12)), location: "Aula 202" },
+      ]
+      return NextResponse.json({ events })
+    }
+
     const session = await getServerSession(authOptions)
     if (!session?.accessToken) {
       return NextResponse.json({ error: "No authenticated Google session" }, { status: 401 })

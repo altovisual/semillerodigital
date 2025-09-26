@@ -11,8 +11,30 @@ export async function GET(
   { params }: { params: { courseId: string } }
 ) {
   try {
-    const { classroom } = await getClassroomClient()
     const { courseId } = params
+
+    if (process.env.MOCK_MODE === "true") {
+      // 144 alumnos ficticios
+      const baseNames = [
+        "Carlos Rodríguez","María González","Juan Pérez","Lucía Martínez","Diego López","Sofía Herrera","Ana Torres","Pedro Ramírez","Valentina Díaz","Mateo García",
+        "Camila Romero","Javier Silva","Paula Castro","Martin Rivas","Agustina Vega","Emilio Navarro","Laura Campos","Nicolás Herrera","Julia Soto","Franco Díaz"
+      ]
+      const students = Array.from({ length: 144 }).map((_, i) => {
+        const name = `${baseNames[i % baseNames.length]} ${Math.floor(i / baseNames.length) + 1}`
+        return {
+          userId: `s${i + 1}`,
+          profile: {
+            id: `s${i + 1}`,
+            name,
+            email: `student${i + 1}@example.com`,
+            photoUrl: undefined,
+          },
+        }
+      })
+      return NextResponse.json({ courseId, students })
+    }
+
+    const { classroom } = await getClassroomClient()
 
     const roster = await classroom.courses.students.list({ courseId })
     const base = (roster.data.students || []).map((s) => ({

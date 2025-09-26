@@ -3,6 +3,11 @@ import { getClassroomClient } from "@/lib/google-client"
 
 export async function GET() {
   try {
+    if (process.env.MOCK_MODE === "true") {
+      const profile = { id: "s1", name: "Sr. Manuel", email: "student1@example.com", photoUrl: undefined }
+      return NextResponse.json({ email: profile.email, profile })
+    }
+
     const { classroom, session } = await getClassroomClient()
 
     // Fetch the signed-in user's Classroom profile

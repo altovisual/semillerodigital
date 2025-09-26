@@ -6,6 +6,7 @@ import Link from "next/link"
 import { GraduationCap, LogOut, User, Bell, Calendar, Clock, CheckCircle, AlertCircle, XCircle } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Progress } from "@/components/ui/progress"
@@ -21,7 +22,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts"
 import { useAuth } from "@/contexts/auth-context"
 import { useSession } from "next-auth/react"
@@ -58,13 +58,8 @@ const upcomingClasses = [
   },
 ]
 
-const progressData = [
-  { week: "Sem 1", progress: 20 },
-  { week: "Sem 2", progress: 35 },
-  { week: "Sem 3", progress: 55 },
-  { week: "Sem 4", progress: 75 },
-  { week: "Sem 5", progress: 85 },
-]
+// Serie del gráfico se construye dinámicamente a partir de tareas reales
+const initialProgressData: Array<{ week: string; progress: number }> = []
 
 export function StudentDashboard() {
   const [selectedSubject, setSelectedSubject] = useState("all")
@@ -75,6 +70,7 @@ export function StudentDashboard() {
   const router = useRouter()
   const { data: session, status: sessionStatus } = useSession()
   const [bootstrapped, setBootstrapped] = useState(false)
+  const isMock = process.env.NEXT_PUBLIC_MOCK_MODE === "true"
 
   // Classroom live data state (student-focused)
   const [gcCourses, setGcCourses] = useState<Array<{ id?: string | null; name?: string | null }>>([])
@@ -84,6 +80,85 @@ export function StudentDashboard() {
   const [gcMyTasks, setGcMyTasks] = useState<Array<{ id: string; title: string; courseId: string; courseName: string; dueDate?: string; state?: string | null; late?: boolean | null; assignedGrade?: number | null; alternateLink?: string | null }>>([])
   const [gcLoading, setGcLoading] = useState(false)
   const [gcError, setGcError] = useState<string | null>(null)
+
+  // Google Calendar: eventos próximos
+  type CalendarEvent = { id: string; summary: string; start: string | null; end: string | null; location?: string | null; hangoutLink?: string | null }
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [calendarError, setCalendarError] = useState<string | null>(null)
+
+  // Helpers: estado y agregaciones
+  const isCompleted = (state?: string | null) => state === "TURNED_IN" || state === "RETURNED" || state === "COMPLETED"
+  const isOverdue = (state?: string | null, late?: boolean | null) => state === "OVERDUE" || !!late
+  const isPending = (state?: string | null) => state === "NO_SUBMISSION" || state === "PENDING"
+
+  const parseDate = (s?: string) => {
+    if (!s) return null
+    const [y, m, d] = s.split("-").map(Number)
+    if (!y || !m || !d) return null
+    return new Date(y, m - 1, d)
+  }
+
+  // Cargar eventos de Google Calendar (próximos 30 días)
+  useEffect(() => {
+    const loadCalendar = async () => {
+      try {
+        if (sessionStatus !== "authenticated") return
+        setCalendarError(null)
+        const now = new Date()
+        const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+        const url = `/api/calendar/events?timeMin=${encodeURIComponent(now.toISOString())}&timeMax=${encodeURIComponent(in30.toISOString())}&calendarId=primary`
+        const res = await fetch(url)
+        if (!res.ok) {
+          // 401 cuando no hay token de Google o no se aceptó el scope
+          setCalendarEvents([])
+          return
+        }
+        const data = await res.json()
+        setCalendarEvents((data.events || []).slice(0, 5))
+      } catch (e: any) {
+        setCalendarError(e?.message || "No se pudieron cargar los eventos del calendario")
+      }
+    }
+    loadCalendar()
+  }, [sessionStatus])
+
+  const getWeekId = (dt: Date) => {
+    // Calcula semana ISO aproximada y año
+    const d = new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate()))
+    const dayNum = d.getUTCDay() || 7
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+    const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
+    return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`
+  }
+
+  const buildProgressSeries = (tasks: typeof gcMyTasks) => {
+    // Agrupa por semana (por dueDate). Usa progreso acumulado (%) hasta esa semana.
+    if (!tasks || tasks.length === 0) return initialProgressData
+    const items = tasks
+      .map((t) => ({ date: parseDate(t.dueDate), isDone: isCompleted(t.state) }))
+      .filter((x) => x.date !== null) as Array<{ date: Date; isDone: boolean }>
+    if (items.length === 0) return initialProgressData
+    items.sort((a, b) => a.date.getTime() - b.date.getTime())
+    const total = tasks.length
+    let doneSoFar = 0
+    const byWeek = new Map<string, number>()
+    for (const it of items) {
+      if (it.isDone) doneSoFar += 1
+      const wk = getWeekId(it.date)
+      const pct = Math.round((doneSoFar / total) * 100)
+      byWeek.set(wk, pct)
+    }
+    // Normaliza a pares ordenados para el gráfico
+    const series = Array.from(byWeek.entries())
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([, pct], idx) => ({ week: `Sem ${idx + 1}`, progress: pct }))
+    // Asegura al menos 3-5 puntos para suavidad; si hay pocos, completa con últimos valores
+    while (series.length < 5 && series.length > 0) {
+      series.push({ week: `Sem ${series.length + 1}`, progress: series[series.length - 1].progress })
+    }
+    return series
+  }
 
   const reloadCourses = async () => {
     try {
@@ -256,7 +331,16 @@ export function StudentDashboard() {
   const filteredTasks: UiTask[] =
     statusFilter === "all" ? subjectFiltered : subjectFiltered.filter((t) => toKey(t) === statusFilter)
 
-  const pendingCount = filteredTasks.filter((t) => !(t.state === "TURNED_IN" || t.state === "RETURNED" || t.state === "COMPLETED")).length
+  const pendingCount = filteredTasks.filter((t) => !isCompleted(t.state)).length
+  const myPendingCount = uiTasks.filter((t) => !isCompleted(t.state)).length
+
+  // Progreso general real
+  const totalTasks = uiTasks.length
+  const completedCount = uiTasks.filter((t) => isCompleted(t.state)).length
+  const generalProgressPct = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0
+
+  // Serie del gráfico "Mi Progreso" basada en tareas reales
+  const chartData = buildProgressSeries(gcMyTasks)
 
   if (!bootstrapped || sessionStatus === "loading") {
     return <FullPageSkeleton />
@@ -272,6 +356,7 @@ export function StudentDashboard() {
               <GraduationCap className="h-5 w-5 text-primary-foreground" />
             </div>
             <h1 className="text-xl font-semibold text-balance">Semillero Digital Tracker</h1>
+            {isMock && <Badge variant="outline" className="ml-2">Mock Mode</Badge>}
             <span className="text-sm bg-green-500/10 text-green-400 px-2 py-1 rounded-full">Estudiante</span>
           </div>
 
@@ -329,13 +414,13 @@ export function StudentDashboard() {
         <div className="bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg p-4 sm:p-6">
           <h2 className="text-2xl font-bold mb-2">¡Hola, {user?.name?.split(" ")[0]}! 👋</h2>
           <p className="text-muted-foreground mb-4">
-            {`Tienes ${pendingCount} tareas por entregar y ${upcomingClasses.length} clases próximas.`}
+            {`Tienes ${myPendingCount} tareas por entregar y ${calendarEvents.length} clases próximas.`}
           </p>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Progreso General:</span>
-              <Progress value={85} className="w-32" />
-              <span className="text-sm font-bold">85%</span>
+              <Progress value={generalProgressPct} className="w-32" />
+              <span className="text-sm font-bold">{generalProgressPct}%</span>
             </div>
           </div>
         </div>
@@ -349,14 +434,16 @@ export function StudentDashboard() {
             <CardContent className="space-y-4">
               {/* Summary by status */}
               {gcSelectedCourseId && (
-                <StatusChips items={filteredTasks.map((t) => ({ state: t.state, late: t.late }))} />
+                <div className="mt-2 [&>*]:mb-2">
+                  <StatusChips items={filteredTasks.map((t) => ({ state: t.state, late: t.late }))} />
+                </div>
               )}
               {/* Controls: Curso + Estado */}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex items-center gap-2">
                   <label className="text-sm font-medium" htmlFor="course-select">Curso:</label>
                   <Select value={gcSelectedCourseId} onValueChange={setGcSelectedCourseId}>
-                    <SelectTrigger id="course-select" className="w-64" aria-label="Seleccionar curso">
+                    <SelectTrigger id="course-select" className="w-full sm:w-64" aria-label="Seleccionar curso">
                       <SelectValue placeholder={gcLoading ? "Cargando cursos..." : "Seleccionar curso"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -371,7 +458,7 @@ export function StudentDashboard() {
                 <div className="flex items-center gap-2">
                   <label className="text-sm font-medium" htmlFor="status-select">Estado:</label>
                   <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-                    <SelectTrigger id="status-select" className="w-48" aria-label="Filtrar por estado">
+                    <SelectTrigger id="status-select" className="w-full sm:w-48" aria-label="Filtrar por estado">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -383,7 +470,7 @@ export function StudentDashboard() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button variant="outline" size="sm" onClick={reloadCourses} disabled={gcLoading} aria-label="Actualizar cursos y tareas">
+                <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={reloadCourses} disabled={gcLoading} aria-label="Actualizar cursos y tareas">
                   {gcLoading ? "Actualizando..." : "Actualizar"}
                 </Button>
                 {gcError && <span className="text-sm text-destructive" role="alert">{gcError}</span>}
@@ -400,9 +487,9 @@ export function StudentDashboard() {
                       const iconKey = key === "in_progress" ? "in-progress" : (key as "completed" | "pending" | "overdue")
                       return getStatusIcon(iconKey)
                     })()}
-                    <div>
-                      <h3 className="font-medium">{task.title}</h3>
-                      <p className="text-sm text-muted-foreground">{task.courseName}</p>
+                    <div className="min-w-0">
+                      <h3 className="font-medium truncate max-w-[220px] sm:max-w-none">{task.title}</h3>
+                      <p className="text-sm text-muted-foreground truncate max-w-[220px] sm:max-w-none">{task.courseName}</p>
                       <div className="flex items-center gap-2 mt-1">
                         {(() => {
                           const key = statusToKey(task.state, task.late ?? null)
@@ -425,26 +512,13 @@ export function StudentDashboard() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {(() => {
-                      const key = statusToKey(task.state, task.late ?? null)
-                      const label = statusToLabel(key)
-                      const variant = statusToBadgeVariant(key)
-                      return (
-                        <Badge variant={variant === "default" ? "default" : variant === "destructive" ? "destructive" : "outline"}>
-                          {label}
-                        </Badge>
-                      )
-                    })()}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                     <div className="flex items-center gap-2">
                       {task.alternateLink && (
-                        <Button variant="ghost" size="sm" asChild aria-label={`Abrir en Classroom: ${task.title}`}>
+                        <Button variant="ghost" size="sm" className="w-full sm:w-auto text-center" asChild aria-label={`Abrir en Classroom: ${task.title}`}>
                           <a href={task.alternateLink} target="_blank" rel="noreferrer">Abrir en Classroom</a>
                         </Button>
                       )}
-                      <Button variant="ghost" size="sm" asChild aria-label={`Ver detalle de ${task.title}`}>
-                        <Link href={`/classroom/tasks/${task.courseId}/${task.id}`}>Ver detalle</Link>
-                      </Button>
                     </div>
                   </div>
                 </div>
@@ -497,14 +571,14 @@ export function StudentDashboard() {
                   <div key={item.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border border-border rounded-lg">
                     <div className="flex items-center gap-3">
                       <Calendar className="h-8 w-8 text-primary" />
-                      <div>
-                        <h3 className="font-medium">{item.title}</h3>
-                        <p className="text-sm text-muted-foreground">{item.courseName}</p>
+                      <div className="min-w-0">
+                        <h3 className="font-medium truncate max-w-[220px] sm:max-w-none">{item.title}</h3>
+                        <p className="text-sm text-muted-foreground truncate max-w-[220px] sm:max-w-none">{item.courseName}</p>
                         <p className="text-xs text-muted-foreground">Vence: {item.dueDate}</p>
                       </div>
                     </div>
                     {item.alternateLink ? (
-                      <a href={item.alternateLink} target="_blank" rel="noreferrer" className="text-primary underline" aria-label="Abrir en Classroom (nueva pestaña)">
+                      <a href={item.alternateLink} target="_blank" rel="noreferrer" className="text-primary underline text-sm w-full sm:w-auto text-center" aria-label="Abrir en Classroom (nueva pestaña)">
                         Abrir en Classroom
                       </a>
                     ) : (
@@ -513,6 +587,37 @@ export function StudentDashboard() {
                   </div>
                 ))
               })()}
+            </CardContent>
+          </Card>
+          {/* Clases próximas (Google Calendar) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-balance">Clases próximas (Calendar)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {calendarEvents.length === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  {calendarError ? calendarError : "No hay eventos próximos o no has dado permisos de Calendar."}
+                </div>
+              ) : (
+                calendarEvents.map((ev) => {
+                  const start = ev.start ? new Date(ev.start) : null
+                  const dateStr = start ? start.toLocaleString() : ""
+                  return (
+                    <div key={ev.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 border border-border rounded-lg">
+                      <div className="min-w-0">
+                        <h3 className="font-medium truncate max-w-[240px] sm:max-w-none">{ev.summary}</h3>
+                        <p className="text-xs text-muted-foreground truncate max-w-[240px] sm:max-w-none">{dateStr}{ev.location ? ` · ${ev.location}` : ""}</p>
+                      </div>
+                      {ev.hangoutLink ? (
+                        <a href={ev.hangoutLink} target="_blank" rel="noreferrer" className="text-primary underline text-sm w-full sm:w-auto text-center">Unirse</a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </div>
+                  )
+                })
+              )}
             </CardContent>
           </Card>
         </div>
@@ -525,7 +630,7 @@ export function StudentDashboard() {
           <CardContent>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={progressData} margin={{ left: 8, right: 8 }}>
+                <LineChart data={chartData} margin={{ left: 8, right: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="week" axisLine={false} tickLine={false} stroke="var(--border)" tick={{ fill: 'var(--muted-foreground)' }} />
                   <YAxis hide={false} stroke="var(--border)" tick={{ fill: 'var(--muted-foreground)' }} />

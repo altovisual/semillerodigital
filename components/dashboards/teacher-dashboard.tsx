@@ -12,13 +12,12 @@ import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis } from "recharts"
+import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, LineChart, Line, CartesianGrid, Tooltip, Legend } from "recharts"
 import { useAuth } from "@/contexts/auth-context"
 import { useSession } from "next-auth/react"
 import { statusToKey, statusToLabel, statusToBadgeVariant } from "@/lib/classroom-status"
 import { StatusChips } from "@/components/shared/status-chips"
 import { GradeBadge } from "@/components/shared/grade-badge"
-import Link from "next/link"
 import { NotificationCenter } from "@/components/notifications/notification-center"
 import { ProfileMenu } from "@/components/profile-menu"
 import { CalendarIntegration } from "@/components/calendar/calendar-integration"
@@ -110,6 +109,7 @@ export function TeacherDashboard() {
   const router = useRouter()
   const { status: sessionStatus } = useSession()
   const [bootstrapped, setBootstrapped] = useState(false)
+  const isMock = process.env.NEXT_PUBLIC_MOCK_MODE === "true"
 
   // Classroom live data state
   const [gcCourses, setGcCourses] = useState<Array<{ id?: string | null; name?: string | null }>>([])
@@ -120,6 +120,10 @@ export function TeacherDashboard() {
   const [gcSubmissions, setGcSubmissions] = useState<Array<{ id?: string | null; userId?: string | null; state?: string | null; late?: boolean | null; assignedGrade?: number | null; alternateLink?: string | null; updateTime?: string | null }>>([])
   const [gcLoading, setGcLoading] = useState(false)
   const [gcError, setGcError] = useState<string | null>(null)
+  // Paginación
+  const [subPage, setSubPage] = useState<number>(1)
+  const [stuPage, setStuPage] = useState<number>(1)
+  const pageSize = 20
   const [gcAllSubmissions, setGcAllSubmissions] = useState<Record<string, Array<{ userId?: string | null; state?: string | null; late?: boolean | null }>>>({})
 
   const reloadCourses = async () => {
@@ -212,6 +216,59 @@ export function TeacherDashboard() {
     loadSubmissions()
   }, [gcSelectedCourseId, gcSelectedWorkId])
 
+  // Derivados de paginación (entregas)
+  const totalSubs = gcSubmissions.length
+  const totalSubPages = Math.max(1, Math.ceil((totalSubs || 0) / pageSize))
+  const safeSubPage = Math.min(Math.max(1, subPage), totalSubPages)
+  const subStart = (safeSubPage - 1) * pageSize
+  const subEnd = Math.min(subStart + pageSize, totalSubs)
+  const paginatedSubs = gcSubmissions.slice(subStart, subEnd)
+
+  // Derivados de paginación (estudiantes)
+  const totalStudents = gcStudents.length
+  const totalStuPages = Math.max(1, Math.ceil((totalStudents || 0) / pageSize))
+  const safeStuPage = Math.min(Math.max(1, stuPage), totalStuPages)
+  const stuStart = (safeStuPage - 1) * pageSize
+  const stuEnd = Math.min(stuStart + pageSize, totalStudents)
+  const paginatedStudents = gcStudents.slice(stuStart, stuEnd)
+
+  // Reset de página al cambiar filtros clave
+  useEffect(() => { setSubPage(1) }, [gcSelectedWorkId, gcSelectedCourseId])
+  useEffect(() => { setStuPage(1) }, [gcSelectedCourseId])
+
+  // Serie real de progreso del curso (por semanas según dueDate del coursework)
+  const courseProgressSeries = (() => {
+    try {
+      const studentsCount = gcStudents.length || 0
+      if (!studentsCount) return [] as Array<{ week: string; progress: number }>
+      const works = (gcCoursework || [])
+        .map((w: any) => ({
+          id: String(w.id),
+          title: w.title || String(w.id),
+          dueDate: (w as any)?.dueDate ? new Date((w as any).dueDate.year, ((w as any).dueDate.month || 1) - 1, (w as any).dueDate.day || 1) : null,
+        }))
+        .filter((w) => !!w.dueDate)
+        .sort((a, b) => (a.dueDate!.getTime() - b.dueDate!.getTime()))
+
+      if (works.length === 0) return []
+
+      let completedSoFar = 0
+      const series: Array<{ week: string; progress: number }> = []
+      for (let i = 0; i < works.length; i++) {
+        const w = works[i]
+        const subs = (gcAllSubmissions as any)[String(w.id)] || []
+        const completedForWork = subs.filter((s: any) => s.state === "TURNED_IN" || s.state === "RETURNED").length
+        completedSoFar += completedForWork
+        const denom = studentsCount * (i + 1)
+        const pct = denom > 0 ? Math.round((completedSoFar / denom) * 100) : 0
+        series.push({ week: `Sem ${i + 1}`, progress: pct })
+      }
+      return series
+    } catch {
+      return [] as Array<{ week: string; progress: number }>
+    }
+  })();
+
   const handleGradeAssignment = (studentId: number) => {
     console.log("[v0] Grading assignment for student:", studentId)
     router.push(`/students/${studentId}/grade`)
@@ -220,6 +277,24 @@ export function TeacherDashboard() {
   const handleSendReminder = (studentId: number) => {
     console.log("[v0] Sending reminder to student:", studentId)
     router.push(`/notifications?studentId=${studentId}`)
+  }
+
+  const handleViewStudentProfile = (userId: string, email: string) => {
+    if (!gcSelectedCourseId || !userId) {
+      console.warn("No se puede abrir el perfil: falta courseId o userId")
+      return
+    }
+    
+    // URL para ver el perfil del estudiante en Google Classroom
+    const classroomProfileUrl = `https://classroom.google.com/c/${gcSelectedCourseId}/p/${userId}`
+    
+    // Abrir en nueva pestaña
+    window.open(classroomProfileUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  // Mostrar skeleton durante la carga inicial
+  if (!bootstrapped || sessionStatus === "loading") {
+    return <FullPageSkeleton />
   }
 
   return (
@@ -232,6 +307,7 @@ export function TeacherDashboard() {
               <GraduationCap className="h-5 w-5 text-primary-foreground" />
             </div>
             <h1 className="text-xl font-semibold text-balance">Semillero Digital Tracker</h1>
+            {isMock && <Badge variant="outline" className="ml-2">Mock Mode</Badge>}
             <span className="text-sm bg-blue-500/10 text-blue-400 px-2 py-1 rounded-full">Profesor</span>
           </div>
 
@@ -327,11 +403,44 @@ export function TeacherDashboard() {
                       <StatusChips items={gcSubmissions.map((s) => ({ state: s.state, late: s.late }))} />
                     )}
 
-                    <div className="flex items-center gap-3 flex-wrap pt-2">
+                    {/* Progreso del Curso (real) */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-balance">Progreso del Curso</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {courseProgressSeries.length === 0 ? (
+                          <div className="text-sm text-muted-foreground">No hay suficientes datos para calcular el progreso.</div>
+                        ) : (
+                          <div className="h-64">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={courseProgressSeries} margin={{ left: 8, right: 8 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                                <XAxis dataKey="week" axisLine={false} tickLine={false} stroke="var(--border)" tick={{ fill: 'var(--muted-foreground)' }} />
+                                <YAxis hide={false} stroke="var(--border)" tick={{ fill: 'var(--muted-foreground)' }} />
+                                <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--foreground)' }} labelStyle={{ color: 'var(--muted-foreground)' }} />
+                                <Legend wrapperStyle={{ color: 'var(--foreground)' }} />
+                                <Line
+                                  type="monotone"
+                                  dataKey="progress"
+                                  name="Progreso"
+                                  stroke="hsl(var(--primary))"
+                                  strokeWidth={3}
+                                  dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 5 }}
+                                  activeDot={{ r: 7, stroke: 'var(--foreground)', strokeWidth: 1 }}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3 pt-2">
                       <div className="flex items-center gap-2">
                         <label className="text-sm font-medium">Tarea:</label>
                         <Select value={gcSelectedWorkId} onValueChange={setGcSelectedWorkId}>
-                          <SelectTrigger className="w-80">
+                          <SelectTrigger className="w-full sm:w-80">
                             <SelectValue placeholder={gcLoading ? "Cargando tareas..." : "Seleccionar tarea"} />
                           </SelectTrigger>
                           <SelectContent>
@@ -349,8 +458,53 @@ export function TeacherDashboard() {
                     </div>
 
                     {/* Review Table: submissions */}
-                    <div className="overflow-x-auto">
-                      <Table>
+                    {/* Mobile cards */}
+                    <div className="sm:hidden space-y-3">
+                      {gcLoading ? (
+                        <div className="text-sm text-muted-foreground">Cargando entregas...</div>
+                      ) : gcSelectedWorkId && gcSubmissions.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">No hay entregas para esta tarea.</div>
+                      ) : (
+                        paginatedSubs.map((sub) => {
+                          const student = gcStudents.find((s) => s.userId === sub.userId)
+                          const name = student?.profile?.name || sub.userId || "-"
+                          const email = student?.profile?.email || "-"
+                          const key = statusToKey(sub.state as string | undefined, sub.late as boolean | null)
+                          const label = statusToLabel(key)
+                          const variant = statusToBadgeVariant(key)
+                          const work = gcCoursework.find((w) => String(w.id) === String(gcSelectedWorkId))
+                          return (
+                            <div key={sub.id || Math.random().toString()} className="rounded-lg border p-3 bg-card">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="font-medium truncate">{name}</div>
+                                  <div className="text-xs text-muted-foreground truncate">{email}</div>
+                                </div>
+                                <span className={`shrink-0 inline-flex items-center px-2 py-1 rounded border text-xs ${variant === "default" ? "bg-primary text-primary-foreground border-transparent" : variant === "destructive" ? "text-destructive border-destructive/40" : "text-muted-foreground border-border"}`}>{label}</span>
+                              </div>
+                              <div className="mt-2 flex items-center justify-between text-xs">
+                                <span className="text-muted-foreground">Tarde</span>
+                                <span className="font-medium">{sub.late ? "Sí" : "No"}</span>
+                              </div>
+                              <div className="mt-2">
+                                <GradeBadge assigned={sub.assignedGrade ?? null} maxPoints={(work?.maxPoints as number | null) ?? null} />
+                              </div>
+                              <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2">
+                                {sub.alternateLink ? (
+                                  <a href={sub.alternateLink} target="_blank" rel="noreferrer" className="text-primary underline text-sm">Abrir en Classroom</a>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">-</span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+
+                    {/* Desktop table */}
+                    <div className="overflow-x-auto hidden sm:block">
+                      <Table className="table">
                         <TableHeader>
                           <TableRow>
                             <TableHead>Alumno</TableHead>
@@ -375,7 +529,7 @@ export function TeacherDashboard() {
                               </TableCell>
                             </TableRow>
                           ) : (
-                            gcSubmissions.map((sub) => {
+                            paginatedSubs.map((sub) => {
                               const student = gcStudents.find((s) => s.userId === sub.userId)
                               const name = student?.profile?.name || sub.userId || "-"
                               const email = student?.profile?.email || "-"
@@ -409,11 +563,6 @@ export function TeacherDashboard() {
                                       ) : (
                                         <span className="text-sm text-muted-foreground">-</span>
                                       )}
-                                      {gcSelectedCourseId && gcSelectedWorkId && (
-                                        <Link href={`/classroom/tasks/${gcSelectedCourseId}/${gcSelectedWorkId}`} className="text-sm underline">
-                                          Ver detalle
-                                        </Link>
-                                      )}
                                     </div>
                                   </TableCell>
                                 </TableRow>
@@ -422,6 +571,17 @@ export function TeacherDashboard() {
                           )}
                         </TableBody>
                       </Table>
+                      {/* Paginación de entregas */}
+                      {totalSubs > pageSize && (
+                        <div className="mt-4 flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Mostrando {subStart + 1}–{subEnd} de {totalSubs}</span>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" disabled={safeSubPage <= 1} onClick={() => setSubPage((p: number) => Math.max(1, p - 1))}>Anterior</Button>
+                            <span className="text-sm">Página {safeSubPage} / {totalSubPages}</span>
+                            <Button variant="outline" size="sm" disabled={safeSubPage >= totalSubPages} onClick={() => setSubPage((p: number) => Math.min(totalSubPages, p + 1))}>Siguiente</Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -438,10 +598,72 @@ export function TeacherDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Gestión de Estudiantes</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Haz click en cualquier fila de estudiante para ver su perfil en Google Classroom
+                </p>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
+                {/* Mobile cards */}
+                <div className="sm:hidden space-y-3">
+                  {gcStudents.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">Selecciona un curso para ver sus estudiantes.</div>
+                  ) : (
+                    paginatedStudents.map((s) => {
+                      const fullName = s.profile?.name || s.userId || "-"
+                      const email = s.profile?.email || "-"
+                      const totalWorks = gcCoursework.length || 0
+                      let completed = 0
+                      let overdue = 0
+                      let pending = 0
+                      for (const w of gcCoursework) {
+                        const subs = gcAllSubmissions[String(w.id)] || []
+                        const mine = subs.find((x) => x.userId === s.userId)
+                        if (!mine) {
+                          pending += 1
+                        } else if (mine.state === "TURNED_IN" || mine.state === "RETURNED") {
+                          completed += 1
+                        } else if (mine.late) {
+                          overdue += 1
+                        } else {
+                          pending += 1
+                        }
+                      }
+                      const pct = totalWorks > 0 ? Math.round((completed / totalWorks) * 100) : 0
+                      return (
+                        <div 
+                          key={s.userId || email} 
+                          className="rounded-lg border p-3 bg-card cursor-pointer hover:bg-accent/50 transition-colors"
+                          onClick={() => handleViewStudentProfile(s.userId || "", email)}
+                          title={`Ver perfil de ${fullName} en Google Classroom`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <UserAvatar name={fullName} email={email} photoUrl={s.profile?.photoUrl || null} size={40} />
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{fullName}</div>
+                              <div className="text-xs text-muted-foreground truncate">{email}</div>
+                            </div>
+                          </div>
+                          <div className="mt-3 space-y-2">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">Progreso</span>
+                              <span className="font-medium">{pct}%</span>
+                            </div>
+                            <Progress value={pct} />
+                            <div className="flex items-center gap-4 text-xs">
+                              <span className="text-green-400">Completadas: {completed}</span>
+                              <span className="text-amber-400">Atrasadas: {overdue}</span>
+                              <span className="text-red-400">Pendientes: {pending}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                {/* Desktop table */}
+                <div className="overflow-x-auto hidden sm:block">
+                  <Table className="table">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Estudiante</TableHead>
@@ -460,7 +682,7 @@ export function TeacherDashboard() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        gcStudents.map((s) => {
+                        paginatedStudents.map((s) => {
                           const fullName = s.profile?.name || s.userId || "-"
                           const email = s.profile?.email || "-"
                           const totalWorks = gcCoursework.length || 0
@@ -482,7 +704,12 @@ export function TeacherDashboard() {
                           }
                           const pct = totalWorks > 0 ? Math.round((completed / totalWorks) * 100) : 0
                           return (
-                            <TableRow key={s.userId || email}>
+                            <TableRow 
+                              key={s.userId || email}
+                              className="cursor-pointer hover:bg-accent/50 transition-colors"
+                              onClick={() => handleViewStudentProfile(s.userId || "", email)}
+                              title={`Ver perfil de ${fullName} en Google Classroom`}
+                            >
                               <TableCell>
                                 <div className="flex items-center gap-3">
                                   <UserAvatar name={fullName} email={email} photoUrl={s.profile?.photoUrl || null} size={32} />
@@ -505,6 +732,17 @@ export function TeacherDashboard() {
                       )}
                     </TableBody>
                   </Table>
+                  {/* Paginación estudiantes */}
+                  {totalStudents > pageSize && (
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Mostrando {stuStart + 1}–{stuEnd} de {totalStudents}</span>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" disabled={safeStuPage <= 1} onClick={() => setStuPage((p: number) => Math.max(1, p - 1))}>Anterior</Button>
+                        <span className="text-sm">Página {safeStuPage} / {totalStuPages}</span>
+                        <Button variant="outline" size="sm" disabled={safeStuPage >= totalStuPages} onClick={() => setStuPage((p: number) => Math.min(totalStuPages, p + 1))}>Siguiente</Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
