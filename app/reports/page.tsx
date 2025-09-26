@@ -9,6 +9,8 @@ import { ReportFilters } from "@/components/reports/report-filters"
 import { Badge } from "@/components/ui/badge"
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, BarChart, Bar } from "recharts"
 import { notificationService } from "@/lib/notification-service"
+import { BackButton } from "@/components/shared/back-button"
+import { BarChart3 } from "lucide-react"
 
 export default function ReportsPage() {
   const [filters, setFilters] = useState({ role: "student", cohort: "all", course: "all", range: "30d" })
@@ -96,7 +98,13 @@ export default function ReportsPage() {
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6">
       <div className="max-w-6xl mx-auto space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl sm:text-2xl font-bold">Reportes</h1>
+          <div className="flex items-center gap-4">
+            <BackButton />
+            <div className="flex items-center gap-3">
+              <BarChart3 className="h-6 w-6" />
+              <h1 className="text-xl sm:text-2xl font-bold">Reportes y Análisis</h1>
+            </div>
+          </div>
           <Button variant="outline" size="sm" onClick={() => window.print()}>Exportar PDF</Button>
         </div>
 

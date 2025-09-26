@@ -8,6 +8,7 @@ import { useEffect, useState } from "react"
 import { useTheme } from "@/contexts/theme-context"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { BackButton } from "@/components/shared/back-button"
 
 export default function SettingsPage() {
   const { user, switchRole } = useAuth()
@@ -35,9 +36,13 @@ export default function SettingsPage() {
   }, [notif])
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-6">
-      <div className="max-w-3xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold">Ajustes</h1>
+    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Header con botón atrás */}
+        <div className="flex items-center gap-4">
+          <BackButton />
+          <h1 className="text-2xl font-bold">Configuración</h1>
+        </div>
 
         <Card>
           <CardHeader>

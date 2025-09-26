@@ -65,38 +65,68 @@ export function ProfileMenu({ user, onLogout }: { user: User | null; onLogout: (
           </div>
 
           <div className="flex flex-col gap-1 p-2">
+            {/* Sección Cuenta - Común para todos los roles */}
             <div className="px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground">Cuenta</div>
             <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/profile") }}>
               <UserIcon className="mr-2 h-4 w-4" /> Mi Perfil
             </Button>
-            <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/settings") }}>
-              <Settings className="mr-2 h-4 w-4" /> Ajustes
-            </Button>
-            <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/notifications") }}>
-              <Bell className="mr-2 h-4 w-4" /> Notificaciones
-            </Button>
 
-            <div className="px-3 py-2 mt-2 text-xs uppercase tracking-wide text-muted-foreground">Herramientas</div>
-            <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/integrations/classroom") }}>
-              <Plug className="mr-2 h-4 w-4" /> Integraciones
-            </Button>
-            <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/integrations/classroom") }}>
-              <BarChart3 className="mr-2 h-4 w-4" /> Mis Cursos
-            </Button>
-            <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/reports") }}>
-              <BarChart3 className="mr-2 h-4 w-4" /> Reportes
-            </Button>
-            <Button
-              variant="ghost"
-              className="justify-start h-10"
-              onClick={() => {
-                setOpen(false)
-                if (typeof window !== "undefined") window.open("https://calendar.google.com", "_blank")
-              }}
-            >
-              <Calendar className="mr-2 h-4 w-4" /> Mi Calendario
-            </Button>
+            {/* Opciones específicas por rol */}
+            {user?.role === "student" ? (
+              // Menú para ESTUDIANTE: Solo Mi Perfil, Integraciones, Mis Cursos, Mi Calendario, Tema
+              <>
+                <div className="px-3 py-2 mt-2 text-xs uppercase tracking-wide text-muted-foreground">Herramientas</div>
+                <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/integrations/classroom") }}>
+                  <Plug className="mr-2 h-4 w-4" /> Integraciones
+                </Button>
+                <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/integrations/classroom") }}>
+                  <BarChart3 className="mr-2 h-4 w-4" /> Mis Cursos
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="justify-start h-10"
+                  onClick={() => {
+                    setOpen(false)
+                    if (typeof window !== "undefined") window.open("https://calendar.google.com", "_blank")
+                  }}
+                >
+                  <Calendar className="mr-2 h-4 w-4" /> Mi Calendario
+                </Button>
+              </>
+            ) : (
+              // Menú para PROFESOR y COORDINADOR: Opciones completas
+              <>
+                <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/settings") }}>
+                  <Settings className="mr-2 h-4 w-4" /> Ajustes
+                </Button>
+                <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/notifications") }}>
+                  <Bell className="mr-2 h-4 w-4" /> Notificaciones
+                </Button>
 
+                <div className="px-3 py-2 mt-2 text-xs uppercase tracking-wide text-muted-foreground">Herramientas</div>
+                <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/integrations/classroom") }}>
+                  <Plug className="mr-2 h-4 w-4" /> Integraciones
+                </Button>
+                <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/integrations/classroom") }}>
+                  <BarChart3 className="mr-2 h-4 w-4" /> Mis Cursos
+                </Button>
+                <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/reports") }}>
+                  <BarChart3 className="mr-2 h-4 w-4" /> Reportes
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="justify-start h-10"
+                  onClick={() => {
+                    setOpen(false)
+                    if (typeof window !== "undefined") window.open("https://calendar.google.com", "_blank")
+                  }}
+                >
+                  <Calendar className="mr-2 h-4 w-4" /> Mi Calendario
+                </Button>
+              </>
+            )}
+
+            {/* Sección Apariencia - Común para todos los roles */}
             <div className="px-3 py-2 mt-2 text-xs uppercase tracking-wide text-muted-foreground">Apariencia</div>
             <div className="flex items-center justify-between px-3 pb-2">
               <div className="flex items-center gap-2 text-sm">

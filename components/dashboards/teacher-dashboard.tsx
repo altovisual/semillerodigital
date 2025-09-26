@@ -14,16 +14,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, LineChart, Line, CartesianGrid, Tooltip, Legend } from "recharts"
 import { useAuth } from "@/contexts/auth-context"
-import { useSession } from "next-auth/react"
 import { statusToKey, statusToLabel, statusToBadgeVariant } from "@/lib/classroom-status"
 import { StatusChips } from "@/components/shared/status-chips"
 import { GradeBadge } from "@/components/shared/grade-badge"
-import { NotificationCenter } from "@/components/notifications/notification-center"
 import { ProfileMenu } from "@/components/profile-menu"
 import { CalendarIntegration } from "@/components/calendar/calendar-integration"
 import { UserAvatar } from "@/components/shared/user-avatar"
 import { FullPageSkeleton } from "@/components/shared/full-page-skeleton"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { AppLogo } from "@/components/shared/app-logo"
+import { NotificationCenter } from "@/components/notifications/notification-center"
+import { useSession } from "next-auth/react"
+import { useScrollDirection } from "@/hooks/use-scroll-direction"
+import { useNotifications } from "@/contexts/notifications-context"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -108,6 +111,8 @@ export function TeacherDashboard() {
   const { user, logout, switchRole } = useAuth()
   const router = useRouter()
   const { status: sessionStatus } = useSession()
+  const { isVisible: isNavVisible } = useScrollDirection()
+  const { generateNotificationsFromClassroomData, addNotification } = useNotifications()
   const [bootstrapped, setBootstrapped] = useState(false)
   const isMock = process.env.NEXT_PUBLIC_MOCK_MODE === "true"
 
@@ -236,6 +241,33 @@ export function TeacherDashboard() {
   useEffect(() => { setSubPage(1) }, [gcSelectedWorkId, gcSelectedCourseId])
   useEffect(() => { setStuPage(1) }, [gcSelectedCourseId])
 
+  // Generate notifications from Google Classroom data
+  useEffect(() => {
+    if (gcCoursework.length > 0 || gcSubmissions.length > 0) {
+      generateNotificationsFromClassroomData({
+        coursework: gcCoursework.map(work => ({ ...work, courseId: gcSelectedCourseId })),
+        submissions: gcSubmissions,
+        courses: gcCourses,
+      })
+    }
+  }, [gcCoursework, gcSubmissions, gcCourses, gcSelectedCourseId, generateNotificationsFromClassroomData])
+
+  // Generate notifications for course management
+  useEffect(() => {
+    if (gcStudents.length > 0 && gcSelectedCourseId) {
+      const selectedCourse = gcCourses.find(c => c.id === gcSelectedCourseId)
+      if (selectedCourse) {
+        addNotification({
+          title: "Gestión de curso",
+          message: `Gestionando curso: ${selectedCourse.name} (${gcStudents.length} estudiantes)`,
+          type: "system",
+          priority: "low",
+          courseId: gcSelectedCourseId,
+        })
+      }
+    }
+  }, [gcStudents.length, gcSelectedCourseId, gcCourses, addNotification])
+
   // Serie real de progreso del curso (por semanas según dueDate del coursework)
   const courseProgressSeries = (() => {
     try {
@@ -303,10 +335,7 @@ export function TeacherDashboard() {
       <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="flex flex-col gap-2 sm:flex-row sm:h-16 sm:items-center sm:justify-between px-4 sm:px-6 py-2">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <GraduationCap className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <h1 className="text-xl font-semibold text-balance">Semillero Digital Tracker</h1>
+            <AppLogo width={140} height={35} />
             {isMock && <Badge variant="outline" className="ml-2">Mock Mode</Badge>}
             <span className="text-sm bg-blue-500/10 text-blue-400 px-2 py-1 rounded-full">Profesor</span>
           </div>
@@ -336,8 +365,10 @@ export function TeacherDashboard() {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
-      <div className="border-b border-border bg-card px-4 sm:px-6 py-3 sm:py-4">
+      {/* Navigation Tabs with Scroll Animation */}
+      <div className={`border-b border-border bg-card px-4 sm:px-6 py-3 sm:py-4 sticky top-16 z-40 transition-transform duration-300 ease-in-out ${
+        isNavVisible ? 'translate-y-0' : '-translate-y-full'
+      }`}>
         <div className="flex gap-2 sm:gap-4 overflow-x-auto whitespace-nowrap">
           <Button variant={activeTab === "overview" ? "secondary" : "ghost"} onClick={() => setActiveTab("overview")}>
             Resumen

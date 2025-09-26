@@ -26,11 +26,15 @@ import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tool
 import { useAuth } from "@/contexts/auth-context"
 import { useSession } from "next-auth/react"
 import { ProfileMenu } from "@/components/profile-menu"
+import { NotificationCenter } from "@/components/notifications/notification-center"
 import { statusToKey, statusToLabel, statusToBadgeVariant } from "@/lib/classroom-status"
 import { StatusChips } from "@/components/shared/status-chips"
 import { GradeBadge } from "@/components/shared/grade-badge"
 import { FullPageSkeleton } from "@/components/shared/full-page-skeleton"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { AppLogo } from "@/components/shared/app-logo"
+import { useScrollDirection } from "@/hooks/use-scroll-direction"
+import { useNotifications } from "@/contexts/notifications-context"
 
 // Nota: Eliminado fallback de tareas mock. Solo se muestran tareas reales de Classroom.
 
@@ -69,6 +73,8 @@ export function StudentDashboard() {
   const { user, logout, switchRole } = useAuth()
   const router = useRouter()
   const { data: session, status: sessionStatus } = useSession()
+  const { isVisible: isNavVisible } = useScrollDirection()
+  const { generateNotificationsFromClassroomData, addNotification } = useNotifications()
   const [bootstrapped, setBootstrapped] = useState(false)
   const isMock = process.env.NEXT_PUBLIC_MOCK_MODE === "true"
 
@@ -256,6 +262,60 @@ export function StudentDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gcSelectedCourseId, session?.user?.email])
 
+  // Generate notifications from student's tasks
+  useEffect(() => {
+    if (gcMyTasks.length > 0) {
+      // Generate notifications for pending and overdue tasks
+      const pendingTasks = gcMyTasks.filter(task => task.state === "NO_SUBMISSION" && task.dueDate)
+      const overdueTasks = gcMyTasks.filter(task => task.late)
+      const gradedTasks = gcMyTasks.filter(task => task.assignedGrade && task.assignedGrade > 0)
+
+      // Notifications for pending tasks with due dates
+      pendingTasks.forEach(task => {
+        if (task.dueDate) {
+          const dueDate = new Date(task.dueDate)
+          const now = new Date()
+          const timeDiff = dueDate.getTime() - now.getTime()
+          const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24))
+
+          if (daysDiff <= 3 && daysDiff > 0) {
+            addNotification({
+              title: "Tarea próxima a vencer",
+              message: `La tarea "${task.title}" vence en ${daysDiff} día${daysDiff > 1 ? 's' : ''}`,
+              type: "deadline",
+              priority: daysDiff === 1 ? "high" : "medium",
+              courseworkId: task.id,
+              actionUrl: task.alternateLink || undefined,
+            })
+          }
+        }
+      })
+
+      // Notifications for overdue tasks
+      overdueTasks.forEach(task => {
+        addNotification({
+          title: "Tarea vencida",
+          message: `La tarea "${task.title}" está vencida. ¡Entrégala cuanto antes!`,
+          type: "reminder",
+          priority: "high",
+          courseworkId: task.id,
+          actionUrl: task.alternateLink || undefined,
+        })
+      })
+
+      // Notifications for new grades
+      gradedTasks.forEach(task => {
+        addNotification({
+          title: "Nueva calificación",
+          message: `Tu tarea "${task.title}" ha sido calificada: ${task.assignedGrade} puntos`,
+          type: "grade",
+          priority: "low",
+          courseworkId: task.id,
+        })
+      })
+    }
+  }, [gcMyTasks, addNotification])
+
   const handleViewTask = (taskId: string | number) => {
     console.log("[v0] Viewing task:", taskId)
     router.push(`/tasks/${taskId}`)
@@ -352,10 +412,7 @@ export function StudentDashboard() {
       <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="flex flex-col gap-2 sm:flex-row sm:h-16 sm:items-center sm:justify-between px-4 sm:px-6 py-2">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <GraduationCap className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <h1 className="text-xl font-semibold text-balance">Semillero Digital Tracker</h1>
+            <AppLogo width={140} height={35} />
             {isMock && <Badge variant="outline" className="ml-2">Mock Mode</Badge>}
             <span className="text-sm bg-green-500/10 text-green-400 px-2 py-1 rounded-full">Estudiante</span>
           </div>
@@ -378,17 +435,17 @@ export function StudentDashboard() {
               </SelectContent>
             </Select>
 
-            <Button variant="ghost" size="sm" onClick={() => router.push("/notifications") }>
-              <Bell className="h-4 w-4" />
-            </Button>
+            <NotificationCenter />
             <ThemeToggle />
             <ProfileMenu user={user} onLogout={() => logout()} />
           </div>
         </div>
       </header>
 
-      {/* Filter Bar */}
-      <div className="border-b border-border bg-card px-4 sm:px-6 py-3 sm:py-4">
+      {/* Filter Bar with Scroll Animation */}
+      <div className={`border-b border-border bg-card px-4 sm:px-6 py-3 sm:py-4 sticky top-16 z-40 transition-transform duration-300 ease-in-out ${
+        isNavVisible ? 'translate-y-0' : '-translate-y-full'
+      }`}>
         <div className="flex items-center gap-3 sm:gap-4 overflow-x-auto whitespace-nowrap">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium">Materia:</label>

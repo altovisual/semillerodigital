@@ -1,96 +1,42 @@
 "use client"
 
-import { useState } from "react"
-import { Bell, Mail, MessageCircle, Send, X, Check, AlertCircle } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { Bell, Mail, MessageCircle, Send, X, Check, AlertCircle, Clock, Award } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
-
-export interface Notification {
-  id: string
-  title: string
-  message: string
-  type: "task" | "reminder" | "grade" | "attendance" | "system"
-  priority: "low" | "medium" | "high"
-  timestamp: Date
-  read: boolean
-  userId: string
-}
-
-interface NotificationSettings {
-  email: boolean
-  whatsapp: boolean
-  telegram: boolean
-  taskUpdates: boolean
-  reminders: boolean
-  grades: boolean
-  attendance: boolean
-}
-
-// Mock notifications data
-const mockNotifications: Notification[] = [
-  {
-    id: "1",
-    title: "Nueva tarea asignada",
-    message: "Se ha asignado una nueva tarea: Proyecto Final React",
-    type: "task",
-    priority: "high",
-    timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-    read: false,
-    userId: "3",
-  },
-  {
-    id: "2",
-    title: "Recordatorio de entrega",
-    message: "La tarea 'Ejercicios JavaScript' vence mañana",
-    type: "reminder",
-    priority: "medium",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-    read: false,
-    userId: "3",
-  },
-  {
-    id: "3",
-    title: "Calificación disponible",
-    message: "Tu tarea 'Diseño de Wireframes' ha sido calificada: 9.5/10",
-    type: "grade",
-    priority: "low",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-    read: true,
-    userId: "3",
-  },
-]
+import { useNotifications } from "@/contexts/notifications-context"
 
 export function NotificationCenter() {
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications)
-  const [settings, setSettings] = useState<NotificationSettings>({
-    email: true,
-    whatsapp: false,
-    telegram: false,
-    taskUpdates: true,
-    reminders: true,
-    grades: true,
-    attendance: true,
-  })
+  const {
+    notifications,
+    unreadCount,
+    settings,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+    updateSettings,
+  } = useNotifications()
+  
   const [isOpen, setIsOpen] = useState(false)
+  const modalRef = useRef<HTMLDivElement>(null)
 
-  const unreadCount = notifications.filter((n) => !n.read).length
+  // Close modal when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
 
-  const markAsRead = (id: string) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
-  }
-
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-  }
-
-  const deleteNotification = (id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id))
-  }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isOpen])
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -99,7 +45,11 @@ export function NotificationCenter() {
       case "reminder":
         return <Bell className="h-4 w-4 text-amber-400" />
       case "grade":
-        return <Check className="h-4 w-4 text-green-400" />
+        return <Award className="h-4 w-4 text-green-400" />
+      case "deadline":
+        return <Clock className="h-4 w-4 text-red-400" />
+      case "attendance":
+        return <Check className="h-4 w-4 text-purple-400" />
       default:
         return <Bell className="h-4 w-4" />
     }
@@ -143,28 +93,61 @@ export function NotificationCenter() {
       </Button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-96 z-50">
-          <Card className="shadow-lg border">
-            <CardHeader className="pb-3">
+        <div 
+          ref={modalRef}
+          className="absolute right-0 top-full mt-2 w-96 z-50 animate-in slide-in-from-top-2 duration-200"
+        >
+          <div className="bg-background/95 backdrop-blur-md border border-border/50 rounded-xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10">
+            <div className="p-4 border-b border-border/50 bg-gradient-to-r from-background/50 to-background/30 rounded-t-xl">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Notificaciones</CardTitle>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
+                    <Bell className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground">Notificaciones</h3>
+                    {unreadCount > 0 && (
+                      <p className="text-xs text-muted-foreground">{unreadCount} sin leer</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
                   {unreadCount > 0 && (
-                    <Button variant="ghost" size="sm" onClick={markAllAsRead}>
-                      Marcar todas como leídas
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={markAllAsRead}
+                      className="text-xs h-8 px-3 hover:bg-primary/10 hover:text-primary transition-colors"
+                    >
+                      Marcar todas
                     </Button>
                   )}
-                  <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)}>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setIsOpen(false)}
+                    className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                  >
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
+            </div>
+            <div className="p-0">
               <Tabs defaultValue="notifications" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="notifications">Notificaciones</TabsTrigger>
-                  <TabsTrigger value="settings">Configuración</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2 bg-muted/30 border-0 rounded-none border-b border-border/50">
+                  <TabsTrigger 
+                    value="notifications" 
+                    className="data-[state=active]:bg-background/80 data-[state=active]:shadow-sm data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none"
+                  >
+                    Notificaciones
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="settings" 
+                    className="data-[state=active]:bg-background/80 data-[state=active]:shadow-sm data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none"
+                  >
+                    Configuración
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="notifications" className="mt-0">
@@ -176,9 +159,11 @@ export function NotificationCenter() {
                         notifications.map((notification) => (
                           <div
                             key={notification.id}
-                            className={`p-3 rounded-lg border transition-colors ${
-                              notification.read ? "bg-muted/30" : "bg-accent/50"
-                            }`}
+                            className={`group p-4 rounded-xl border border-border/30 transition-all duration-200 hover:shadow-md ${
+                              notification.read 
+                                ? "bg-background/40 backdrop-blur-sm" 
+                                : "bg-gradient-to-r from-primary/5 to-accent/10 backdrop-blur-sm border-primary/20 shadow-sm"
+                            } hover:bg-background/60 hover:border-border/50`}
                           >
                             <div className="flex items-start gap-3">
                               {getNotificationIcon(notification.type)}
@@ -194,22 +179,35 @@ export function NotificationCenter() {
                                   <span className="text-xs text-muted-foreground">
                                     {formatTimestamp(notification.timestamp)}
                                   </span>
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {notification.actionUrl && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          window.open(notification.actionUrl, '_blank', 'noopener,noreferrer')
+                                          markAsRead(notification.id)
+                                        }}
+                                        className="h-7 px-3 text-xs bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 border border-blue-500/20 rounded-lg transition-colors"
+                                      >
+                                        Ver
+                                      </Button>
+                                    )}
                                     {!notification.read && (
                                       <Button
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => markAsRead(notification.id)}
-                                        className="h-6 px-2 text-xs"
+                                        className="h-7 px-3 text-xs bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-lg transition-colors"
                                       >
-                                        Marcar como leída
+                                        Marcar leída
                                       </Button>
                                     )}
                                     <Button
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => deleteNotification(notification.id)}
-                                      className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
                                     >
                                       <X className="h-3 w-3" />
                                     </Button>
@@ -226,9 +224,14 @@ export function NotificationCenter() {
 
                 <TabsContent value="settings" className="mt-0">
                   <div className="p-4 space-y-6">
-                    <div>
-                      <h3 className="font-medium mb-3">Canales de Notificación</h3>
-                      <div className="space-y-3">
+                    <div className="bg-gradient-to-r from-background/50 to-background/30 backdrop-blur-sm border border-border/30 rounded-xl p-4">
+                      <h3 className="font-semibold mb-4 flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-primary/10 border border-primary/20">
+                          <Mail className="h-4 w-4 text-primary" />
+                        </div>
+                        Canales de Notificación
+                      </h3>
+                      <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Mail className="h-4 w-4" />
@@ -237,7 +240,7 @@ export function NotificationCenter() {
                           <Switch
                             id="email"
                             checked={settings.email}
-                            onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, email: checked }))}
+                            onCheckedChange={(checked) => updateSettings({ email: checked })}
                           />
                         </div>
                         <div className="flex items-center justify-between">
@@ -248,7 +251,7 @@ export function NotificationCenter() {
                           <Switch
                             id="whatsapp"
                             checked={settings.whatsapp}
-                            onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, whatsapp: checked }))}
+                            onCheckedChange={(checked) => updateSettings({ whatsapp: checked })}
                           />
                         </div>
                         <div className="flex items-center justify-between">
@@ -259,21 +262,26 @@ export function NotificationCenter() {
                           <Switch
                             id="telegram"
                             checked={settings.telegram}
-                            onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, telegram: checked }))}
+                            onCheckedChange={(checked) => updateSettings({ telegram: checked })}
                           />
                         </div>
                       </div>
                     </div>
 
-                    <div>
-                      <h3 className="font-medium mb-3">Tipos de Notificación</h3>
-                      <div className="space-y-3">
+                    <div className="bg-gradient-to-r from-background/50 to-background/30 backdrop-blur-sm border border-border/30 rounded-xl p-4">
+                      <h3 className="font-semibold mb-4 flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-primary/10 border border-primary/20">
+                          <Bell className="h-4 w-4 text-primary" />
+                        </div>
+                        Tipos de Notificación
+                      </h3>
+                      <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <Label htmlFor="taskUpdates">Actualizaciones de Tareas</Label>
                           <Switch
                             id="taskUpdates"
                             checked={settings.taskUpdates}
-                            onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, taskUpdates: checked }))}
+                            onCheckedChange={(checked) => updateSettings({ taskUpdates: checked })}
                           />
                         </div>
                         <div className="flex items-center justify-between">
@@ -281,7 +289,7 @@ export function NotificationCenter() {
                           <Switch
                             id="reminders"
                             checked={settings.reminders}
-                            onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, reminders: checked }))}
+                            onCheckedChange={(checked) => updateSettings({ reminders: checked })}
                           />
                         </div>
                         <div className="flex items-center justify-between">
@@ -289,7 +297,7 @@ export function NotificationCenter() {
                           <Switch
                             id="grades"
                             checked={settings.grades}
-                            onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, grades: checked }))}
+                            onCheckedChange={(checked) => updateSettings({ grades: checked })}
                           />
                         </div>
                         <div className="flex items-center justify-between">
@@ -297,18 +305,28 @@ export function NotificationCenter() {
                           <Switch
                             id="attendance"
                             checked={settings.attendance}
-                            onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, attendance: checked }))}
+                            onCheckedChange={(checked) => updateSettings({ attendance: checked })}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="deadlines">Fechas Límite</Label>
+                          <Switch
+                            id="deadlines"
+                            checked={settings.deadlines}
+                            onCheckedChange={(checked) => updateSettings({ deadlines: checked })}
                           />
                         </div>
                       </div>
                     </div>
 
-                    <Button className="w-full">Guardar Configuración</Button>
+                    <Button className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all duration-200 rounded-xl">
+                      Guardar Configuración
+                    </Button>
                   </div>
                 </TabsContent>
               </Tabs>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       )}
     </div>

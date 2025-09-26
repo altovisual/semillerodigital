@@ -5,6 +5,8 @@ import { useSession, signIn, signOut } from "next-auth/react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { BackButton } from "@/components/shared/back-button"
+import { Plug, CheckCircle, AlertCircle, RefreshCw, ExternalLink } from "lucide-react"
 
 export default function ClassroomIntegrationPage() {
   const { data: session, status: sessionStatus } = useSession()
@@ -40,13 +42,52 @@ export default function ClassroomIntegrationPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6">
-      <div className="max-w-3xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Header con botón atrás */}
         <div className="flex items-center justify-between">
-          <h1 className="text-xl sm:text-2xl font-bold">Integración: Google Classroom</h1>
-          <Badge variant={isAuthenticated ? "default" : "secondary"}>
-            {isAuthenticated ? "Conectado" : "Desconectado"}
+          <div className="flex items-center gap-4">
+            <BackButton />
+            <div className="flex items-center gap-3">
+              <Plug className="h-6 w-6" />
+              <h1 className="text-xl sm:text-2xl font-bold">Integración: Google Classroom</h1>
+            </div>
+          </div>
+          <Badge variant={isAuthenticated ? "default" : "secondary"} className="flex items-center gap-2">
+            {isAuthenticated ? (
+              <>
+                <CheckCircle className="h-4 w-4" />
+                Conectado
+              </>
+            ) : (
+              <>
+                <AlertCircle className="h-4 w-4" />
+                Desconectado
+              </>
+            )}
           </Badge>
         </div>
+
+        {/* Estado de la conexión */}
+        <Card className={isAuthenticated ? "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/50" : "border-orange-200 bg-orange-50/50 dark:border-orange-800 dark:bg-orange-950/50"}>
+          <CardContent className="flex items-center gap-4 p-6">
+            {isAuthenticated ? (
+              <CheckCircle className="h-8 w-8 text-green-600" />
+            ) : (
+              <AlertCircle className="h-8 w-8 text-orange-600" />
+            )}
+            <div>
+              <h3 className="font-semibold">
+                {isAuthenticated ? "Integración Activa" : "Integración Requerida"}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {isAuthenticated 
+                  ? "Tu cuenta está conectada con Google Classroom. Puedes sincronizar cursos y datos."
+                  : "Conecta tu cuenta de Google para acceder a los datos de Google Classroom."
+                }
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -54,14 +95,19 @@ export default function ClassroomIntegrationPage() {
           </CardHeader>
           <CardContent className="flex flex-col sm:flex-row gap-3">
             {!isAuthenticated ? (
-              <Button onClick={connect} disabled={loading}>
+              <Button onClick={connect} disabled={loading} className="flex items-center gap-2">
+                <ExternalLink className="h-4 w-4" />
                 {loading ? "Conectando..." : "Conectar con Google"}
               </Button>
             ) : (
               <>
-                <Button variant="outline" onClick={disconnect}>Desconectar</Button>
-                <Button onClick={sync} disabled={loading}>
-                  {loading ? "Sincronizando..." : "Listar cursos"}
+                <Button variant="outline" onClick={disconnect} className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  Desconectar
+                </Button>
+                <Button onClick={sync} disabled={loading} className="flex items-center gap-2">
+                  <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                  {loading ? "Sincronizando..." : "Sincronizar cursos"}
                 </Button>
               </>
             )}

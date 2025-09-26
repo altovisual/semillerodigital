@@ -22,8 +22,11 @@ import { AdvancedReports } from "@/components/reports/advanced-reports"
 import { notificationService } from "@/lib/notification-service"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ProfileMenu } from "@/components/profile-menu"
+import { AppLogo } from "@/components/shared/app-logo"
 import { FullPageSkeleton } from "@/components/shared/full-page-skeleton"
 import { UserAvatar } from "@/components/shared/user-avatar"
+import { useScrollDirection } from "@/hooks/use-scroll-direction"
+import { useNotifications } from "@/contexts/notifications-context"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -119,13 +122,15 @@ const FILTERS: FilterType[] = ["Todos", "Entregado", "Atrasado", "Faltante", "Pe
 export function CoordinatorDashboard() {
   const [selectedCohort, setSelectedCohort] = useState("")
   const [selectedTeacher, setSelectedTeacher] = useState("")
-  const [activeFilter, setActiveFilter] = useState<FilterType>("Todos")
   const [activeTab, setActiveTab] = useState("overview")
+  const [activeFilter, setActiveFilter] = useState<FilterType>("Todos")
   const [profileOpen, setProfileOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
   const { user, logout, switchRole } = useAuth()
   const router = useRouter()
-  const { data: session, status: sessionStatus } = useSession()
+  const { status: sessionStatus } = useSession()
+  const { isVisible: isNavVisible } = useScrollDirection()
+  const { generateNotificationsFromClassroomData, addNotification } = useNotifications()
 
   // Classroom live data state
   const [gcCourses, setGcCourses] = useState<Array<{ id?: string | null; name?: string | null; section?: string | null; ownerId?: string | null }>>([])
@@ -137,7 +142,7 @@ export function CoordinatorDashboard() {
   const [gcCoursework, setGcCoursework] = useState<Array<{ id?: string | null; title?: string | null; maxPoints?: number | null }>>([])
   const [gcSelectedWorkId, setGcSelectedWorkId] = useState<string>("")
   const [gcSubmissions, setGcSubmissions] = useState<Array<{ id?: string | null; userId?: string | null; state?: string | null; late?: boolean | null; assignedGrade?: number | null; alternateLink?: string | null; updateTime?: string | null }>>([])
-  const [gcAllSubmissions, setGcAllSubmissions] = useState<Record<string, Array<{ userId?: string | null; state?: string | null; late?: boolean | null }>>>({});
+  const [gcAllSubmissions, setGcAllSubmissions] = useState<Record<string, Array<{ userId?: string | null; state?: string | null; late?: boolean | null }>>>({})
   
   // Paginación
   const [subPage, setSubPage] = useState<number>(1)
@@ -275,6 +280,33 @@ export function CoordinatorDashboard() {
   useEffect(() => { setSubPage(1) }, [gcSelectedWorkId, gcSelectedCourseId])
   useEffect(() => { setStuPage(1) }, [gcSelectedCourseId])
 
+  // Generate notifications from Google Classroom data
+  useEffect(() => {
+    if (gcCoursework.length > 0 || gcSubmissions.length > 0) {
+      generateNotificationsFromClassroomData({
+        coursework: gcCoursework.map(work => ({ ...work, courseId: gcSelectedCourseId })),
+        submissions: gcSubmissions,
+        courses: gcCourses,
+      })
+    }
+  }, [gcCoursework, gcSubmissions, gcCourses, gcSelectedCourseId, generateNotificationsFromClassroomData])
+
+  // Generate notifications for new students or course changes
+  useEffect(() => {
+    if (gcStudents.length > 0 && gcSelectedCourseId) {
+      const selectedCourse = gcCourses.find(c => c.id === gcSelectedCourseId)
+      if (selectedCourse) {
+        addNotification({
+          title: "Curso seleccionado",
+          message: `Revisando datos del curso: ${selectedCourse.name}`,
+          type: "system",
+          priority: "low",
+          courseId: gcSelectedCourseId,
+        })
+      }
+    }
+  }, [gcStudents.length, gcSelectedCourseId, gcCourses, addNotification])
+
   const handleSendNotification = async (studentId: number) => {
     console.log("[v0] Sending notification to student:", studentId)
 
@@ -326,10 +358,7 @@ export function CoordinatorDashboard() {
       <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="flex flex-col gap-2 sm:flex-row sm:h-16 sm:items-center sm:justify-between px-4 sm:px-6 py-2">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <GraduationCap className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <h1 className="text-xl font-semibold text-balance">Semillero Digital Tracker</h1>
+            <AppLogo width={140} height={35} />
             <span className="text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">Coordinador</span>
           </div>
 
@@ -360,8 +389,10 @@ export function CoordinatorDashboard() {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
-      <div className="border-b border-border bg-card px-4 sm:px-6 py-3 sm:py-4">
+      {/* Navigation Tabs with Scroll Animation */}
+      <div className={`border-b border-border bg-card px-4 sm:px-6 py-3 sm:py-4 sticky top-16 z-40 transition-transform duration-300 ease-in-out ${
+        isNavVisible ? 'translate-y-0' : '-translate-y-full'
+      }`}>
         <div className="flex gap-2 sm:gap-4 overflow-x-auto whitespace-nowrap">
           <Button variant={activeTab === "overview" ? "secondary" : "ghost"} onClick={() => setActiveTab("overview")}>
             <Users className="h-4 w-4 mr-2" />
@@ -964,7 +995,18 @@ export function CoordinatorDashboard() {
           </div>
         )}
 
-        {activeTab === "reports" && <AdvancedReports compact />}
+        {activeTab === "reports" && (
+          <AdvancedReports 
+            compact 
+            realData={{
+              gcCourses,
+              gcStudents,
+              gcCoursework,
+              gcSubmissions,
+              gcAllSubmissions
+            }}
+          />
+        )}
       </main>
     </div>
   )

@@ -24,7 +24,17 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Download, Users, Clock, Target, Award } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Download, Users, Clock, Target, Award, AlertTriangle, User } from "lucide-react"
+
+// Types for real data
+interface RealDataProps {
+  gcCourses?: Array<{ id?: string | null; name?: string | null; section?: string | null }>
+  gcStudents?: Array<{ userId?: string | null; profile?: { name?: string | null; email?: string | null } }>
+  gcCoursework?: Array<{ id?: string | null; title?: string | null; maxPoints?: number | null }>
+  gcSubmissions?: Array<{ userId?: string | null; state?: string | null; late?: boolean | null; assignedGrade?: number | null }>
+  gcAllSubmissions?: Record<string, Array<{ userId?: string | null; state?: string | null; late?: boolean | null }>>
+}
 
 // Mock data for advanced reports
 const cohortPerformanceData = [
@@ -91,14 +101,139 @@ const studentRiskData = [
   { risk: "Alto", count: 8, color: "#ef4444" },
 ]
 
-export function AdvancedReports({ compact = false }: { compact?: boolean }) {
+// Mock data for students at risk by category
+const studentsAtRisk = {
+  lowAttendance: [
+    { name: "Carlos Mendoza", email: "carlos.mendoza@email.com", attendance: 65, lastSeen: "Hace 3 días" },
+    { name: "Ana Rodríguez", email: "ana.rodriguez@email.com", attendance: 58, lastSeen: "Hace 5 días" },
+    { name: "Luis García", email: "luis.garcia@email.com", attendance: 62, lastSeen: "Hace 2 días" },
+    { name: "María Torres", email: "maria.torres@email.com", attendance: 55, lastSeen: "Hace 1 semana" },
+    { name: "Pedro Sánchez", email: "pedro.sanchez@email.com", attendance: 68, lastSeen: "Hace 4 días" },
+  ],
+  lateSubmissions: [
+    { name: "Sofia López", email: "sofia.lopez@email.com", lateCount: 5, lastSubmission: "Hace 2 días (tarde)" },
+    { name: "Diego Martín", email: "diego.martin@email.com", lateCount: 4, lastSubmission: "Hace 1 día (tarde)" },
+    { name: "Carmen Ruiz", email: "carmen.ruiz@email.com", lateCount: 6, lastSubmission: "Hace 3 días (tarde)" },
+    { name: "Javier Morales", email: "javier.morales@email.com", lateCount: 4, lastSubmission: "Ayer (tarde)" },
+    { name: "Elena Vega", email: "elena.vega@email.com", lateCount: 5, lastSubmission: "Hace 4 días (tarde)" },
+    { name: "Roberto Silva", email: "roberto.silva@email.com", lateCount: 3, lastSubmission: "Hace 1 día (tarde)" },
+    { name: "Patricia Herrera", email: "patricia.herrera@email.com", lateCount: 7, lastSubmission: "Hace 2 días (tarde)" },
+    { name: "Fernando Castro", email: "fernando.castro@email.com", lateCount: 4, lastSubmission: "Ayer (tarde)" },
+  ],
+  lowGrades: [
+    { name: "Miguel Jiménez", email: "miguel.jimenez@email.com", avgGrade: 5.2, lastGrade: "4.5 (Proyecto React)" },
+    { name: "Laura Peña", email: "laura.pena@email.com", avgGrade: 5.8, lastGrade: "5.0 (Examen JS)" },
+    { name: "Andrés Ramos", email: "andres.ramos@email.com", avgGrade: 4.9, lastGrade: "4.2 (Tarea HTML)" },
+  ],
+  inactivity: [
+    { name: "Cristina Vargas", email: "cristina.vargas@email.com", daysSinceActivity: 10, lastActivity: "Entrega de tarea" },
+    { name: "Raúl Ortega", email: "raul.ortega@email.com", daysSinceActivity: 8, lastActivity: "Comentario en foro" },
+    { name: "Isabel Guerrero", email: "isabel.guerrero@email.com", daysSinceActivity: 12, lastActivity: "Login al sistema" },
+    { name: "Tomás Delgado", email: "tomas.delgado@email.com", daysSinceActivity: 9, lastActivity: "Descarga de material" },
+  ]
+}
+
+export function AdvancedReports({ 
+  compact = false, 
+  realData 
+}: { 
+  compact?: boolean 
+  realData?: RealDataProps 
+}) {
   const [selectedPeriod, setSelectedPeriod] = useState("current-quarter")
   const [selectedCohort, setSelectedCohort] = useState("all")
   const [reportType, setReportType] = useState("overview")
+  const [riskModalOpen, setRiskModalOpen] = useState(false)
+  const [selectedRiskCategory, setSelectedRiskCategory] = useState<string | null>(null)
+
+  // Calculate real metrics from Google Classroom data
+  const calculateRealMetrics = () => {
+    if (!realData?.gcStudents || !realData?.gcCoursework || !realData?.gcAllSubmissions) {
+      return null
+    }
+
+    const totalStudents = realData.gcStudents.length
+    const totalCoursework = realData.gcCoursework.length
+    
+    let totalSubmissions = 0
+    let completedSubmissions = 0
+    let onTimeSubmissions = 0
+    let totalGrades = 0
+    let gradeCount = 0
+
+    // Calculate metrics from all submissions
+    Object.values(realData.gcAllSubmissions).forEach(submissions => {
+      submissions.forEach(sub => {
+        totalSubmissions++
+        if (sub.state === "TURNED_IN" || sub.state === "RETURNED") {
+          completedSubmissions++
+          if (!sub.late) {
+            onTimeSubmissions++
+          }
+        }
+      })
+    })
+
+    // Calculate grades from current submissions
+    realData.gcSubmissions?.forEach(sub => {
+      if (sub.assignedGrade && sub.assignedGrade > 0) {
+        totalGrades += sub.assignedGrade
+        gradeCount++
+      }
+    })
+
+    const completionRate = totalSubmissions > 0 ? Math.round((completedSubmissions / totalSubmissions) * 100) : 0
+    const onTimeRate = totalSubmissions > 0 ? Math.round((onTimeSubmissions / totalSubmissions) * 100) : 0
+    const avgGrade = gradeCount > 0 ? (totalGrades / gradeCount).toFixed(1) : "N/A"
+
+    return {
+      totalStudents,
+      completionRate,
+      onTimeRate,
+      avgGrade
+    }
+  }
+
+  const realMetrics = calculateRealMetrics()
 
   const handleExportReport = (format: "pdf" | "excel") => {
     console.log(`[v0] Exporting report as ${format}`)
     alert(`Exportando reporte como ${format.toUpperCase()}...`)
+  }
+
+  const handleRiskCardClick = (category: string) => {
+    setSelectedRiskCategory(category)
+    setRiskModalOpen(true)
+  }
+
+  const getRiskStudents = (category: string) => {
+    switch (category) {
+      case "lowAttendance":
+        return studentsAtRisk.lowAttendance
+      case "lateSubmissions":
+        return studentsAtRisk.lateSubmissions
+      case "lowGrades":
+        return studentsAtRisk.lowGrades
+      case "inactivity":
+        return studentsAtRisk.inactivity
+      default:
+        return []
+    }
+  }
+
+  const getRiskCategoryTitle = (category: string) => {
+    switch (category) {
+      case "lowAttendance":
+        return "Estudiantes con Asistencia Baja"
+      case "lateSubmissions":
+        return "Estudiantes con Entregas Atrasadas"
+      case "lowGrades":
+        return "Estudiantes con Calificaciones Bajas"
+      case "inactivity":
+        return "Estudiantes con Inactividad Prolongada"
+      default:
+        return "Estudiantes en Riesgo"
+    }
   }
 
   return (
@@ -108,7 +243,12 @@ export function AdvancedReports({ compact = false }: { compact?: boolean }) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-3xl font-bold">Reportes Avanzados</h2>
-            <p className="text-muted-foreground">Análisis detallado del rendimiento académico</p>
+            <div className="flex items-center gap-3">
+              <p className="text-muted-foreground">Análisis detallado del rendimiento académico</p>
+              <Badge variant={realMetrics ? "default" : "secondary"}>
+                {realMetrics ? "Datos Reales" : "Datos de Prueba"}
+              </Badge>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
@@ -154,8 +294,10 @@ export function AdvancedReports({ compact = false }: { compact?: boolean }) {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Total Estudiantes</p>
-              <p className="text-2xl font-bold">65</p>
-              <p className="text-xs text-green-500">+8% vs mes anterior</p>
+              <p className="text-2xl font-bold">{realMetrics?.totalStudents || 65}</p>
+              <p className="text-xs text-muted-foreground">
+                {realMetrics ? "Datos reales de Google Classroom" : "+8% vs mes anterior"}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -166,8 +308,10 @@ export function AdvancedReports({ compact = false }: { compact?: boolean }) {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Tasa de Finalización</p>
-              <p className="text-2xl font-bold">87%</p>
-              <p className="text-xs text-green-500">+3% vs mes anterior</p>
+              <p className="text-2xl font-bold">{realMetrics?.completionRate || 87}%</p>
+              <p className="text-xs text-muted-foreground">
+                {realMetrics ? "Basado en entregas reales" : "+3% vs mes anterior"}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -178,8 +322,10 @@ export function AdvancedReports({ compact = false }: { compact?: boolean }) {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Entregas a Tiempo</p>
-              <p className="text-2xl font-bold">82%</p>
-              <p className="text-xs text-red-500">-2% vs mes anterior</p>
+              <p className="text-2xl font-bold">{realMetrics?.onTimeRate || 82}%</p>
+              <p className="text-xs text-muted-foreground">
+                {realMetrics ? "Calculado de Google Classroom" : "-2% vs mes anterior"}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -190,8 +336,10 @@ export function AdvancedReports({ compact = false }: { compact?: boolean }) {
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Calificación Promedio</p>
-              <p className="text-2xl font-bold">8.2</p>
-              <p className="text-xs text-green-500">+0.3 vs mes anterior</p>
+              <p className="text-2xl font-bold">{realMetrics?.avgGrade || "8.2"}</p>
+              <p className="text-xs text-muted-foreground">
+                {realMetrics ? "Promedio de calificaciones reales" : "+0.3 vs mes anterior"}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -498,36 +646,60 @@ export function AdvancedReports({ compact = false }: { compact?: boolean }) {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 border border-red-200 rounded-lg bg-red-50/50">
+                  <div 
+                    className="flex items-center justify-between p-3 border border-red-200 rounded-lg bg-red-50/50 cursor-pointer hover:bg-red-100/50 transition-colors"
+                    onClick={() => handleRiskCardClick("lowAttendance")}
+                  >
                     <div>
                       <p className="font-medium text-red-800">Asistencia Baja</p>
                       <p className="text-sm text-red-600">Menos del 70% de asistencia</p>
                     </div>
-                    <Badge variant="destructive">5 estudiantes</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="destructive">5 estudiantes</Badge>
+                      <AlertTriangle className="h-4 w-4 text-red-600" />
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 border border-amber-200 rounded-lg bg-amber-50/50">
+                  <div 
+                    className="flex items-center justify-between p-3 border border-amber-200 rounded-lg bg-amber-50/50 cursor-pointer hover:bg-amber-100/50 transition-colors"
+                    onClick={() => handleRiskCardClick("lateSubmissions")}
+                  >
                     <div>
                       <p className="font-medium text-amber-800">Entregas Atrasadas</p>
                       <p className="text-sm text-amber-600">Más de 3 entregas tardías</p>
                     </div>
-                    <Badge variant="secondary">8 estudiantes</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">8 estudiantes</Badge>
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 border border-orange-200 rounded-lg bg-orange-50/50">
+                  <div 
+                    className="flex items-center justify-between p-3 border border-orange-200 rounded-lg bg-orange-50/50 cursor-pointer hover:bg-orange-100/50 transition-colors"
+                    onClick={() => handleRiskCardClick("lowGrades")}
+                  >
                     <div>
                       <p className="font-medium text-orange-800">Calificaciones Bajas</p>
                       <p className="text-sm text-orange-600">Promedio menor a 6.0</p>
                     </div>
-                    <Badge variant="secondary">3 estudiantes</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">3 estudiantes</Badge>
+                      <AlertTriangle className="h-4 w-4 text-orange-600" />
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 border border-yellow-200 rounded-lg bg-yellow-50/50">
+                  <div 
+                    className="flex items-center justify-between p-3 border border-yellow-200 rounded-lg bg-yellow-50/50 cursor-pointer hover:bg-yellow-100/50 transition-colors"
+                    onClick={() => handleRiskCardClick("inactivity")}
+                  >
                     <div>
                       <p className="font-medium text-yellow-800">Inactividad Prolongada</p>
                       <p className="text-sm text-yellow-600">Sin actividad por más de 7 días</p>
                     </div>
-                    <Badge variant="secondary">4 estudiantes</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">4 estudiantes</Badge>
+                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                    </div>
                   </div>
                 </div>
 
@@ -545,6 +717,99 @@ export function AdvancedReports({ compact = false }: { compact?: boolean }) {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Modal de Estudiantes en Riesgo */}
+      <Dialog open={riskModalOpen} onOpenChange={setRiskModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              {selectedRiskCategory ? getRiskCategoryTitle(selectedRiskCategory) : "Estudiantes en Riesgo"}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {selectedRiskCategory && (
+              <div className="grid gap-3">
+                {getRiskStudents(selectedRiskCategory).map((student, index) => (
+                  <div key={index} className="flex items-center justify-between p-4 border rounded-lg bg-card hover:bg-accent/50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                        <User className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{student.name}</p>
+                        <p className="text-sm text-muted-foreground">{student.email}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="text-right">
+                      {selectedRiskCategory === "lowAttendance" && (
+                        <>
+                          <p className="text-sm font-medium text-red-600">{(student as any).attendance}% asistencia</p>
+                          <p className="text-xs text-muted-foreground">{(student as any).lastSeen}</p>
+                        </>
+                      )}
+                      {selectedRiskCategory === "lateSubmissions" && (
+                        <>
+                          <p className="text-sm font-medium text-amber-600">{(student as any).lateCount} entregas tardías</p>
+                          <p className="text-xs text-muted-foreground">{(student as any).lastSubmission}</p>
+                        </>
+                      )}
+                      {selectedRiskCategory === "lowGrades" && (
+                        <>
+                          <p className="text-sm font-medium text-orange-600">Promedio: {(student as any).avgGrade}</p>
+                          <p className="text-xs text-muted-foreground">{(student as any).lastGrade}</p>
+                        </>
+                      )}
+                      {selectedRiskCategory === "inactivity" && (
+                        <>
+                          <p className="text-sm font-medium text-yellow-600">{(student as any).daysSinceActivity} días inactivo</p>
+                          <p className="text-xs text-muted-foreground">{(student as any).lastActivity}</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <div className="mt-6 p-4 bg-blue-50/50 border border-blue-200 rounded-lg">
+              <h4 className="font-medium text-blue-800 mb-2">Acciones Recomendadas</h4>
+              <div className="text-sm text-blue-700 space-y-1">
+                {selectedRiskCategory === "lowAttendance" && (
+                  <>
+                    <p>• Contactar a los estudiantes para conocer las razones de su ausencia</p>
+                    <p>• Ofrecer sesiones de recuperación o material adicional</p>
+                    <p>• Implementar un sistema de seguimiento personalizado</p>
+                  </>
+                )}
+                {selectedRiskCategory === "lateSubmissions" && (
+                  <>
+                    <p>• Enviar recordatorios automáticos antes de las fechas límite</p>
+                    <p>• Revisar la carga de trabajo y plazos de entrega</p>
+                    <p>• Ofrecer sesiones de organización y gestión del tiempo</p>
+                  </>
+                )}
+                {selectedRiskCategory === "lowGrades" && (
+                  <>
+                    <p>• Programar sesiones de tutoría individual</p>
+                    <p>• Revisar el material de estudio y metodología</p>
+                    <p>• Considerar evaluaciones adicionales o proyectos de recuperación</p>
+                  </>
+                )}
+                {selectedRiskCategory === "inactivity" && (
+                  <>
+                    <p>• Contactar inmediatamente para verificar el estado del estudiante</p>
+                    <p>• Ofrecer apoyo técnico si hay problemas de acceso</p>
+                    <p>• Implementar check-ins regulares para mantener el engagement</p>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
