@@ -3,11 +3,13 @@
 import type React from "react"
 
 import { useState } from "react"
-import { GraduationCap, Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { AppLogo } from "@/components/shared/app-logo"
+import { GoogleIcon } from "@/components/ui/google-icon"
 import { useAuth } from "@/contexts/auth-context"
 
 export function LoginForm() {
@@ -31,13 +33,10 @@ export function LoginForm() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
-              <GraduationCap className="h-7 w-7 text-primary-foreground" />
-            </div>
+          <div className="flex justify-center mb-6">
+            <AppLogo width={160} height={60} className="max-w-full h-auto" />
           </div>
-          <CardTitle className="text-2xl font-bold">Semillero Digital</CardTitle>
-          <CardDescription>Ingresa con Google o tus credenciales para acceder al sistema</CardDescription>
+          <CardDescription className="text-base">Ingresa con Google o tus credenciales para acceder al sistema</CardDescription>
         </CardHeader>
         <CardContent>
           {/* Botón Google */}
@@ -45,10 +44,11 @@ export function LoginForm() {
             <Button
               type="button"
               variant="outline"
-              className="w-full"
+              className="w-full flex items-center gap-3 h-11"
               onClick={() => login()}
               disabled={isLoading}
             >
+              {!isLoading && <GoogleIcon className="w-5 h-5" />}
               {isLoading ? "Conectando..." : "Continuar con Google"}
             </Button>
             <div className="relative text-center">

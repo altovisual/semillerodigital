@@ -2,6 +2,8 @@
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import { useSession } from "next-auth/react"
+import { useState, useEffect } from "react"
 
 export type ReportFilterValue = {
   role: "coordinator" | "teacher" | "student" | "all" | string
@@ -11,6 +13,32 @@ export type ReportFilterValue = {
 }
 
 export function ReportFilters({ value, onChange }: { value: ReportFilterValue; onChange: (v: ReportFilterValue) => void }) {
+  const { data: session, status: sessionStatus } = useSession()
+  const [realCourses, setRealCourses] = useState<Array<{ id: string; name: string }>>([])
+
+  // Cargar cursos reales de Google Classroom
+  useEffect(() => {
+    const loadCourses = async () => {
+      if (sessionStatus !== "authenticated") return
+      
+      try {
+        const resp = await fetch("/api/classroom/courses")
+        if (resp.ok) {
+          const data = await resp.json()
+          const courses = (data.courses || []).map((c: any) => ({
+            id: c.id || "",
+            name: c.name || `Curso ${c.id}`
+          }))
+          setRealCourses(courses)
+        }
+      } catch (error) {
+        console.warn("Error loading courses for filters:", error)
+      }
+    }
+
+    loadCourses()
+  }, [sessionStatus])
+
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
       <div className="flex items-center gap-2">
@@ -50,9 +78,19 @@ export function ReportFilters({ value, onChange }: { value: ReportFilterValue; o
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="js">JavaScript</SelectItem>
-            <SelectItem value="react">React</SelectItem>
-            <SelectItem value="node">Node.js</SelectItem>
+            {realCourses.length > 0 ? (
+              realCourses.map((course) => (
+                <SelectItem key={course.id} value={course.id}>
+                  {course.name}
+                </SelectItem>
+              ))
+            ) : (
+              <>
+                <SelectItem value="js">JavaScript</SelectItem>
+                <SelectItem value="react">React</SelectItem>
+                <SelectItem value="node">Node.js</SelectItem>
+              </>
+            )}
           </SelectContent>
         </Select>
       </div>

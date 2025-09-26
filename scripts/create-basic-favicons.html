@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generador de Favicons - Semillero Digital</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        canvas { border: 1px solid #ccc; margin: 10px; }
+        .download-section { margin: 20px 0; }
+        button { padding: 10px 20px; margin: 5px; background: #4fc096; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #3a9d7a; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+    </style>
+</head>
+<body>
+    <h1>🎨 Generador de Favicons - Semillero Digital</h1>
+    <p>Este generador crea favicons básicos basados en el diseño de Asset 3mvpx.svg</p>
+    
+    <div class="grid">
+        <div>
+            <h3>16x16 - Favicon pequeño</h3>
+            <canvas id="canvas16" width="16" height="16"></canvas>
+            <br><button onclick="downloadCanvas('canvas16', 'icon-16x16.png')">Descargar</button>
+        </div>
+        
+        <div>
+            <h3>32x32 - Favicon estándar</h3>
+            <canvas id="canvas32" width="32" height="32"></canvas>
+            <br><button onclick="downloadCanvas('canvas32', 'icon-32x32.png')">Descargar</button>
+        </div>
+        
+        <div>
+            <h3>180x180 - Apple Touch Icon</h3>
+            <canvas id="canvas180" width="180" height="180"></canvas>
+            <br><button onclick="downloadCanvas('canvas180', 'apple-touch-icon.png')">Descargar</button>
+        </div>
+        
+        <div>
+            <h3>192x192 - Android Chrome</h3>
+            <canvas id="canvas192" width="192" height="192"></canvas>
+            <br><button onclick="downloadCanvas('canvas192', 'android-chrome-192x192.png')">Descargar</button>
+        </div>
+        
+        <div>
+            <h3>512x512 - Android Chrome Large</h3>
+            <canvas id="canvas512" width="512" height="512"></canvas>
+            <br><button onclick="downloadCanvas('canvas512', 'android-chrome-512x512.png')">Descargar</button>
+        </div>
+    </div>
+
+    <div class="download-section">
+        <h3>📥 Instrucciones:</h3>
+        <ol>
+            <li>Haz clic en "Descargar" para cada tamaño</li>
+            <li>Guarda los archivos en la carpeta <code>public/</code> de tu proyecto</li>
+            <li>Los favicons se generarán automáticamente</li>
+        </ol>
+    </div>
+
+    <script>
+        // Colores del diseño original
+        const colors = {
+            green: '#4fc096',
+            orange: '#f48234', 
+            purple: '#542ba0',
+            blue: '#3cace1'
+        };
+
+        function drawFavicon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            const scale = size / 512; // Escalar desde el tamaño original 512x512
+            
+            // Limpiar canvas
+            ctx.clearRect(0, 0, size, size);
+            
+            // Fondo con esquinas redondeadas
+            const radius = Math.max(2, size * 0.05);
+            ctx.fillStyle = '#ffffff';
+            roundRect(ctx, 0, 0, size, size, radius);
+            ctx.fill();
+            
+            // Dibujar formas simplificadas basadas en el SVG original
+            const centerX = size / 2;
+            const centerY = size / 2;
+            
+            // Forma principal (simplificada)
+            ctx.fillStyle = colors.green;
+            ctx.beginPath();
+            ctx.arc(centerX + size * 0.1, centerY - size * 0.1, size * 0.15, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Forma naranja (simplificada)
+            ctx.fillStyle = colors.orange;
+            ctx.beginPath();
+            ctx.arc(centerX - size * 0.15, centerY + size * 0.1, size * 0.12, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Forma azul (simplificada)
+            ctx.fillStyle = colors.blue;
+            ctx.beginPath();
+            ctx.arc(centerX - size * 0.1, centerY - size * 0.2, size * 0.08, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Forma púrpura (simplificada)
+            ctx.fillStyle = colors.purple;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY + size * 0.2, size * 0.1, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Borde sutil
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = Math.max(0.5, size * 0.002);
+            roundRect(ctx, 0, 0, size, size, radius);
+            ctx.stroke();
+        }
+
+        function roundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+
+        function downloadCanvas(canvasId, filename) {
+            const canvas = document.getElementById(canvasId);
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // Generar todos los favicons al cargar la página
+        window.onload = function() {
+            const sizes = [16, 32, 180, 192, 512];
+            sizes.forEach(size => {
+                const canvas = document.getElementById(`canvas${size}`);
+                drawFavicon(canvas, size);
+            });
+        };
+    </script>
+</body>
+</html>

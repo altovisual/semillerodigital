@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { GraduationCap, LogOut, User, FileText, Users, BookOpen, Clock, MoreHorizontal } from "lucide-react"
+import { LogOut, User, FileText, Users, BookOpen, Clock, MoreHorizontal } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, LineChart, Line, CartesianGrid, Tooltip, Legend } from "recharts"
 import { useAuth } from "@/contexts/auth-context"
+import { Logo } from "@/components/ui/logo"
 import { statusToKey, statusToLabel, statusToBadgeVariant } from "@/lib/classroom-status"
 import { StatusChips } from "@/components/shared/status-chips"
 import { GradeBadge } from "@/components/shared/grade-badge"
@@ -38,6 +39,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { TaskStatusFilter } from "@/components/filters/task-status-filter"
+import { filterSubmissionsByStatus, getSubmissionStats } from "@/lib/task-status-utils"
 
 // Mock data for teacher dashboard
 const myStudents = [
@@ -130,6 +133,9 @@ export function TeacherDashboard() {
   const [stuPage, setStuPage] = useState<number>(1)
   const pageSize = 20
   const [gcAllSubmissions, setGcAllSubmissions] = useState<Record<string, Array<{ userId?: string | null; state?: string | null; late?: boolean | null }>>>({})
+  
+  // Filtros de estado de tareas
+  const [selectedTaskStatuses, setSelectedTaskStatuses] = useState<string[]>([])
 
   const reloadCourses = async () => {
     try {
@@ -221,13 +227,17 @@ export function TeacherDashboard() {
     loadSubmissions()
   }, [gcSelectedCourseId, gcSelectedWorkId])
 
-  // Derivados de paginación (entregas)
-  const totalSubs = gcSubmissions.length
+  // Filtrado de entregas por estado
+  const filteredSubmissions = filterSubmissionsByStatus(gcSubmissions, selectedTaskStatuses)
+  const submissionStats = getSubmissionStats(gcSubmissions)
+  
+  // Derivados de paginación (entregas filtradas)
+  const totalSubs = filteredSubmissions.length
   const totalSubPages = Math.max(1, Math.ceil((totalSubs || 0) / pageSize))
   const safeSubPage = Math.min(Math.max(1, subPage), totalSubPages)
   const subStart = (safeSubPage - 1) * pageSize
   const subEnd = Math.min(subStart + pageSize, totalSubs)
-  const paginatedSubs = gcSubmissions.slice(subStart, subEnd)
+  const paginatedSubs = filteredSubmissions.slice(subStart, subEnd)
 
   // Derivados de paginación (estudiantes)
   const totalStudents = gcStudents.length
@@ -238,7 +248,7 @@ export function TeacherDashboard() {
   const paginatedStudents = gcStudents.slice(stuStart, stuEnd)
 
   // Reset de página al cambiar filtros clave
-  useEffect(() => { setSubPage(1) }, [gcSelectedWorkId, gcSelectedCourseId])
+  useEffect(() => { setSubPage(1) }, [gcSelectedWorkId, gcSelectedCourseId, selectedTaskStatuses])
   useEffect(() => { setStuPage(1) }, [gcSelectedCourseId])
 
   // Generate notifications from Google Classroom data
@@ -487,6 +497,19 @@ export function TeacherDashboard() {
                         <span className="text-sm text-muted-foreground">Este curso no tiene tareas aún.</span>
                       )}
                     </div>
+
+                    {/* Filtros de estado de tareas */}
+                    {gcSelectedWorkId && gcSubmissions.length > 0 && (
+                      <div className="border-t pt-4">
+                        <TaskStatusFilter
+                          selectedStatuses={selectedTaskStatuses}
+                          onStatusChange={setSelectedTaskStatuses}
+                          totalCount={gcSubmissions.length}
+                          filteredCount={totalSubs}
+                          className="mb-4"
+                        />
+                      </div>
+                    )}
 
                     {/* Review Table: submissions */}
                     {/* Mobile cards */}
