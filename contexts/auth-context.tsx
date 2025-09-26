@@ -63,8 +63,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return true
   }
 
-  const logout = () => {
-    signOut({ callbackUrl: "/" })
+  const logout = async () => {
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("semillero_role")
+      }
+      const base = typeof window !== "undefined" ? window.location.origin : ""
+      await signOut({ callbackUrl: base ? `${base}/` : "/" })
+    } catch (e) {
+      // Como respaldo, forzamos navegación al home
+      if (typeof window !== "undefined") {
+        window.location.href = "/"
+      }
+    }
   }
 
   const switchRole = (newRole: UserRole) => {

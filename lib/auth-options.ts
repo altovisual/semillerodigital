@@ -42,6 +42,8 @@ export const authOptions: NextAuthOptions = {
             "https://www.googleapis.com/auth/classroom.coursework.students.readonly",
             "https://www.googleapis.com/auth/classroom.student-submissions.me.readonly",
             "https://www.googleapis.com/auth/classroom.student-submissions.students.readonly",
+            // Calendar read-only scope
+            "https://www.googleapis.com/auth/calendar.readonly",
           ].join(" "),
         },
       },

@@ -11,7 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis } from "recharts"
+import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend, BarChart, Bar, CartesianGrid } from "recharts"
 import { useAuth } from "@/contexts/auth-context"
 import { statusToKey, statusToLabel, statusToBadgeVariant } from "@/lib/classroom-status"
 import { StatusChips } from "@/components/shared/status-chips"
@@ -23,6 +23,8 @@ import { AdvancedReports } from "@/components/reports/advanced-reports"
 import { notificationService } from "@/lib/notification-service"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ProfileMenu } from "@/components/profile-menu"
+import { FullPageSkeleton } from "@/components/shared/full-page-skeleton"
+import { UserAvatar } from "@/components/shared/user-avatar"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -132,6 +134,7 @@ export function CoordinatorDashboard() {
   const [gcStudents, setGcStudents] = useState<Array<{ userId?: string | null; profile?: { id?: string | null; name?: string | null; email?: string | null; photoUrl?: string | null } }>>([])
   const [gcLoading, setGcLoading] = useState(false)
   const [gcError, setGcError] = useState<string | null>(null)
+  const [bootstrapped, setBootstrapped] = useState(false)
   const [gcCoursework, setGcCoursework] = useState<Array<{ id?: string | null; title?: string | null; maxPoints?: number | null }>>([])
   const [gcSelectedWorkId, setGcSelectedWorkId] = useState<string>("")
   const [gcSubmissions, setGcSubmissions] = useState<Array<{ id?: string | null; userId?: string | null; state?: string | null; late?: boolean | null; assignedGrade?: number | null; alternateLink?: string | null; updateTime?: string | null }>>([])
@@ -161,6 +164,7 @@ export function CoordinatorDashboard() {
         setGcCoursework([])
         setGcSelectedWorkId("")
         setGcSubmissions([])
+        setBootstrapped(true)
       }
     } catch (e: any) {
       setGcError(e?.message || "No se pudieron cargar los cursos")
@@ -220,6 +224,7 @@ export function CoordinatorDashboard() {
         setGcError(e?.message || "No se pudieron cargar los alumnos")
       } finally {
         setGcLoading(false)
+        setBootstrapped(true)
       }
     }
     loadStudentsAndCoursework()
@@ -274,7 +279,7 @@ export function CoordinatorDashboard() {
     if (activeFilter === "Atrasado" && student.late === 0) return false
     if (activeFilter === "Faltante" && student.missing === 0) return false
     return true
-  })
+  });
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -411,15 +416,7 @@ export function CoordinatorDashboard() {
                               <TableRow key={s.userId || s.profile?.email || s.profile?.id || idx}>
                                 <TableCell>
                                   <div className="flex items-center gap-3">
-                                    <Avatar className="h-8 w-8">
-                                      <AvatarImage src={s.profile?.photoUrl || "/placeholder.svg"} />
-                                      <AvatarFallback>
-                                        {(s.profile?.name || "?")
-                                          .split(" ")
-                                          .map((n) => n[0])
-                                          .join("")}
-                                      </AvatarFallback>
-                                    </Avatar>
+                                    <UserAvatar name={s.profile?.name || s.userId || ""} email={s.profile?.email || ""} photoUrl={s.profile?.photoUrl || null} size={32} />
                                     <span className="font-medium">{s.profile?.name || s.userId}</span>
                                   </div>
                                 </TableCell>
@@ -596,54 +593,7 @@ export function CoordinatorDashboard() {
                 )}
               </CardContent>
             </Card>
-            {/* Filter Bar */}
-            <div className="border border-border bg-card px-6 py-4 rounded-lg">
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium">Cohorte:</label>
-                  <Select value={selectedCohort} onValueChange={setSelectedCohort}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Seleccionar cohorte" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Desarrollo Web - 2025 Q1">Desarrollo Web - 2025 Q1</SelectItem>
-                      <SelectItem value="Diseño UX/UI - 2025 Q1">Diseño UX/UI - 2025 Q1</SelectItem>
-                      <SelectItem value="Data Science - 2024 Q4">Data Science - 2024 Q4</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium">Profesor:</label>
-                  <Select value={selectedTeacher} onValueChange={setSelectedTeacher}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Todos los profesores" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="juan">Juan Pérez</SelectItem>
-                      <SelectItem value="maria">María Gómez</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Estado:</span>
-                  <div className="flex gap-1">
-                    {["Todos", "Entregado", "Atrasado", "Faltante"].map((filter) => (
-                      <Button
-                        key={filter}
-                        variant={activeFilter === filter ? "secondary" : "outline"}
-                        size="sm"
-                        onClick={() => setActiveFilter(filter)}
-                        className="text-xs"
-                      >
-                        {filter}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
+            
 
             {/* Quick Actions (live data) */}
             <div className="grid gap-4 md:grid-cols-4">
@@ -735,15 +685,7 @@ export function CoordinatorDashboard() {
                           <TableRow key={s.userId || email}>
                             <TableCell>
                               <div className="flex items-center gap-3">
-                                <Avatar className="h-8 w-8">
-                                  <AvatarImage src={s.profile?.photoUrl || "/placeholder.svg"} />
-                                  <AvatarFallback>
-                                    {(fullName || "?")
-                                      .split(" ")
-                                      .map((n) => n[0])
-                                      .join("")}
-                                  </AvatarFallback>
-                                </Avatar>
+                                <UserAvatar name={fullName} email={email} photoUrl={s.profile?.photoUrl || null} size={32} />
                                 <span className="font-medium">{fullName}</span>
                               </div>
                             </TableCell>
@@ -767,56 +709,16 @@ export function CoordinatorDashboard() {
                 </Table>
               </CardContent>
             </Card>
-
             {/* Quick Reports */}
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-balance">Reportes Rápidos</h2>
               <div className="grid gap-6 md:grid-cols-2">
-                {/* Delivery Status Chart (live) */}
+                {/* Delivery Status Chart (Donut mejorado) */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-balance">Estado General de Entregas</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          {(() => {
-                            let completed = 0
-                            let overdue = 0
-                            let pending = 0
-                            for (const w of gcCoursework) {
-                              const subs = gcAllSubmissions[String(w.id)] || []
-                              for (const s of subs) {
-                                if (s.state === "TURNED_IN" || s.state === "RETURNED") completed++
-                                else if (s.late) overdue++
-                                else pending++
-                              }
-                            }
-                            const data = [
-                              { name: "Completadas", value: completed, color: "hsl(var(--success))" },
-                              { name: "Atrasadas", value: overdue, color: "hsl(var(--warning))" },
-                              { name: "Pendientes", value: pending, color: "hsl(var(--destructive))" },
-                            ]
-                            return (
-                              <Pie
-                                data={data}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={60}
-                                outerRadius={100}
-                                paddingAngle={5}
-                                dataKey="value"
-                              >
-                                {data.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
-                              </Pie>
-                            )
-                          })()}
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
                     {(() => {
                       let completed = 0
                       let overdue = 0
@@ -829,50 +731,73 @@ export function CoordinatorDashboard() {
                           else pending++
                         }
                       }
+                      const total = completed + overdue + pending
                       const data = [
-                        { label: "Completadas", value: completed, color: "hsl(var(--success))" },
-                        { label: "Atrasadas", value: overdue, color: "hsl(var(--warning))" },
-                        { label: "Pendientes", value: pending, color: "hsl(var(--destructive))" },
+                        { name: "Completadas", value: completed, color: "hsl(var(--success))" },
+                        { name: "Atrasadas", value: overdue, color: "hsl(var(--warning))" },
+                        { name: "Pendientes", value: pending, color: "hsl(var(--destructive))" },
                       ]
                       return (
-                        <div className="flex justify-center gap-6 mt-4">
-                          {data.map((item, idx) => (
-                            <div key={idx} className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                              <span className="text-sm">{item.label}: {item.value}</span>
+                        <div className="h-64 relative">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Tooltip formatter={(v: any, n: string) => [`${v}`, n]} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--foreground)' }} labelStyle={{ color: 'var(--muted-foreground)' }} />
+                              <Legend wrapperStyle={{ color: 'var(--foreground)' }} />
+                              <Pie data={data} cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={2} dataKey="value">
+                                {data.map((entry, i) => (
+                                  <Cell key={i} fill={entry.color} />
+                                ))}
+                              </Pie>
+                            </PieChart>
+                          </ResponsiveContainer>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold">{total}</div>
+                              <div className="text-xs text-muted-foreground">Total entregas</div>
                             </div>
-                          ))}
+                          </div>
                         </div>
                       )
                     })()}
                   </CardContent>
                 </Card>
 
-                {/* Attendance Chart */}
+                {/* Estados por Tarea (Barras Apiladas) */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-balance">Asistencia Promedio</CardTitle>
+                    <CardTitle className="text-balance">Estados por Tarea</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-center mb-4">
-                      <div className="text-4xl font-bold text-primary">92%</div>
-                      <div className="text-sm text-muted-foreground">Promedio últimas 4 semanas</div>
-                    </div>
-                    <div className="h-32">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={attendanceData}>
-                          <XAxis dataKey="week" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                          <YAxis hide />
-                          <Line
-                            type="monotone"
-                            dataKey="attendance"
-                            stroke="hsl(var(--primary))"
-                            strokeWidth={2}
-                            dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 4 }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
+                    {(() => {
+                      // Construye dataset por tarea
+                      const rows = (gcCoursework || []).slice(0, 8).map((w) => {
+                        const subs = gcAllSubmissions[String(w.id)] || []
+                        let completed = 0, overdue = 0, pending = 0
+                        for (const s of subs) {
+                          if (s.state === "TURNED_IN" || s.state === "RETURNED") completed++
+                          else if (s.late) overdue++
+                          else pending++
+                        }
+                        return { name: w.title || String(w.id), Completadas: completed, Atrasadas: overdue, Pendientes: pending }
+                      })
+                      if (rows.length === 0) return <div className="text-sm text-muted-foreground">No hay tareas para este curso.</div>
+                      return (
+                        <div className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={rows} margin={{ left: 8, right: 8 }}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                              <XAxis dataKey="name" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} stroke="var(--border)" hide={false} interval={0} angle={-15} textAnchor="end" height={60} />
+                              <YAxis stroke="var(--border)" tick={{ fill: 'var(--muted-foreground)' }} />
+                              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--foreground)' }} labelStyle={{ color: 'var(--muted-foreground)' }} />
+                              <Legend wrapperStyle={{ color: 'var(--foreground)' }} />
+                              <Bar dataKey="Completadas" stackId="a" fill="hsl(var(--success))" />
+                              <Bar dataKey="Atrasadas" stackId="a" fill="hsl(var(--warning))" />
+                              <Bar dataKey="Pendientes" stackId="a" fill="hsl(var(--destructive))" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )
+                    })()}
                   </CardContent>
                 </Card>
               </div>

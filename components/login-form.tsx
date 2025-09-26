@@ -37,10 +37,28 @@ export function LoginForm() {
             </div>
           </div>
           <CardTitle className="text-2xl font-bold">Semillero Digital</CardTitle>
-          <CardDescription>Ingresa tus credenciales para acceder al sistema</CardDescription>
+          <CardDescription>Ingresa con Google o tus credenciales para acceder al sistema</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Botón Google */}
+          <div className="space-y-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => login()}
+              disabled={isLoading}
+            >
+              {isLoading ? "Conectando..." : "Continuar con Google"}
+            </Button>
+            <div className="relative text-center">
+              <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-border" aria-hidden />
+              <span className="relative bg-card px-2 text-xs text-muted-foreground">o</span>
+            </div>
+          </div>
+
+          {/* Formulario tradicional (opcional) */}
+          <form onSubmit={handleSubmit} className="space-y-4 mt-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input

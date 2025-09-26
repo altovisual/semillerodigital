@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -12,11 +13,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { LogOut, User as UserIcon, Bell, HelpCircle, BarChart3, Plug } from "lucide-react"
+import { LogOut, User as UserIcon, Bell, HelpCircle, BarChart3, Plug, Settings, Palette, Calendar } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { User } from "@/contexts/auth-context"
 import { useAuth } from "@/contexts/auth-context"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 
@@ -26,6 +27,9 @@ export function ProfileMenu({ user, onLogout }: { user: User | null; onLogout: (
   const [changeOpen, setChangeOpen] = useState(false)
   const router = useRouter()
   const { switchRole } = useAuth()
+  const { data: session } = useSession()
+
+  const photo = user?.avatar || session?.user?.image || "/placeholder-user.jpg"
 
   // Si no hay usuario, mostramos un botón simple para ir a iniciar sesión
   if (!user) {
@@ -40,86 +44,75 @@ export function ProfileMenu({ user, onLogout }: { user: User | null; onLogout: (
         <SheetTrigger asChild>
           <Button variant="ghost" className="flex items-center gap-2 px-3" onClick={() => setOpen(true)}>
             <Avatar className="h-8 w-8">
-              <AvatarImage src={user?.avatar || "/placeholder.svg"} />
-              <AvatarFallback>
-                {user?.name
-                  ?.split(" ")
-                  .map((n) => n[0])
-                  .join("")}
-              </AvatarFallback>
+              <AvatarImage src={photo} alt={user?.name || user?.email || "Usuario"} />
+              <AvatarFallback />
             </Avatar>
             <span className="hidden sm:inline-block">{user?.name}</span>
           </Button>
         </SheetTrigger>
-        <SheetContent side="right" className="w-[360px] max-w-[100vw]">
-          <SheetHeader className="mb-4 text-left">
+        <SheetContent side="right" className="w-[380px] max-w-[100vw] p-0">
+          <div className="p-5 border-b">
             <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10">
-                <AvatarImage src={user?.avatar || "/placeholder.svg"} />
-                <AvatarFallback>
-                  {user?.name
-                    ?.split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
+              <Avatar className="h-12 w-12">
+                <AvatarImage src={photo} alt={user?.name || user?.email || "Usuario"} />
+                <AvatarFallback />
               </Avatar>
               <div className="min-w-0">
                 <SheetTitle className="truncate">{user?.name || "Invitado"}</SheetTitle>
-                <SheetDescription className="truncate">{user?.email || ""}</SheetDescription>
+                <SheetDescription className="truncate text-sm">{user?.email || ""}</SheetDescription>
               </div>
             </div>
-          </SheetHeader>
+          </div>
 
-          <div className="flex flex-col gap-2">
-            <Button variant="ghost" className="justify-start" onClick={() => { setOpen(false); router.push("/profile") }}>
+          <div className="flex flex-col gap-1 p-2">
+            <div className="px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground">Cuenta</div>
+            <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/profile") }}>
               <UserIcon className="mr-2 h-4 w-4" /> Mi Perfil
             </Button>
-            <Button variant="ghost" className="justify-start" onClick={() => { setOpen(false); router.push("/settings") }}>
-              ⚙️ Ajustes
+            <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/settings") }}>
+              <Settings className="mr-2 h-4 w-4" /> Ajustes
             </Button>
-            <Button variant="ghost" className="justify-start" onClick={() => { setOpen(false); router.push("/reports") }}>
-              <BarChart3 className="mr-2 h-4 w-4" /> Reportes
-            </Button>
-            <Button variant="ghost" className="justify-start" onClick={() => { setOpen(false); router.push("/integrations/classroom") }}>
-              <Plug className="mr-2 h-4 w-4" /> Integraciones
-            </Button>
-            <Button variant="ghost" className="justify-start" onClick={() => { setOpen(false); router.push("/notifications") }}>
+            <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/notifications") }}>
               <Bell className="mr-2 h-4 w-4" /> Notificaciones
             </Button>
-            <Button variant="ghost" className="justify-start" onClick={() => { setOpen(false); router.push("/help") }}>
-              <HelpCircle className="mr-2 h-4 w-4" /> Ayuda
+
+            <div className="px-3 py-2 mt-2 text-xs uppercase tracking-wide text-muted-foreground">Herramientas</div>
+            <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/integrations/classroom") }}>
+              <Plug className="mr-2 h-4 w-4" /> Integraciones
             </Button>
-            <Button variant="ghost" className="justify-start" onClick={() => setChangeOpen(true)}>
-              🔒 Cambiar contraseña
+            <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/integrations/classroom") }}>
+              <BarChart3 className="mr-2 h-4 w-4" /> Mis Cursos
+            </Button>
+            <Button variant="ghost" className="justify-start h-10" onClick={() => { setOpen(false); router.push("/reports") }}>
+              <BarChart3 className="mr-2 h-4 w-4" /> Reportes
+            </Button>
+            <Button
+              variant="ghost"
+              className="justify-start h-10"
+              onClick={() => {
+                setOpen(false)
+                if (typeof window !== "undefined") window.open("https://calendar.google.com", "_blank")
+              }}
+            >
+              <Calendar className="mr-2 h-4 w-4" /> Mi Calendario
             </Button>
 
-            <div className="my-2 h-px bg-border" />
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">Rol</p>
-                <p className="text-xs text-muted-foreground">Cambia la vista rápidamente</p>
+            <div className="px-3 py-2 mt-2 text-xs uppercase tracking-wide text-muted-foreground">Apariencia</div>
+            <div className="flex items-center justify-between px-3 pb-2">
+              <div className="flex items-center gap-2 text-sm">
+                <Palette className="h-4 w-4 text-muted-foreground" /> Tema
               </div>
-              <Select
-                value={user?.role}
-                onValueChange={(role) => {
-                  switchRole(role as any)
-                  setOpen(false)
-                  router.replace(`/dashboard/${role}`)
-                }}
-              >
-                <SelectTrigger className="w-44">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="coordinator">Coordinador</SelectItem>
-                  <SelectItem value="teacher">Profesor</SelectItem>
-                  <SelectItem value="student">Estudiante</SelectItem>
-                </SelectContent>
-              </Select>
+              <ThemeToggle />
             </div>
-            <Button variant="ghost" className="justify-start text-destructive" onClick={() => setLogoutOpen(true)}>
-              <LogOut className="mr-2 h-4 w-4" /> Cerrar Sesión
-            </Button>
+
+            <div className="my-2 h-px bg-border" />
+            <div className="p-3">
+              <Button variant="destructive" className="w-full" onClick={async () => {
+                await signOut({ callbackUrl: "/" })
+              }}>
+                <LogOut className="mr-2 h-4 w-4" /> Desconectar
+              </Button>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
@@ -136,14 +129,9 @@ export function ProfileMenu({ user, onLogout }: { user: User | null; onLogout: (
             <Button variant="outline" onClick={() => setLogoutOpen(false)}>Cancelar</Button>
             <Button
               variant="destructive"
-              onClick={() => {
-                try {
-                  onLogout()
-                } finally {
-                  if (typeof window !== "undefined") {
-                    window.location.href = "/"
-                  }
-                }
+              onClick={async () => {
+                // Comportamiento idéntico a Integraciones: desconectar con NextAuth
+                await signOut({ callbackUrl: "/" })
               }}
             >
               Confirmar

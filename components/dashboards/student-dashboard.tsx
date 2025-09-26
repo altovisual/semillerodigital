@@ -22,13 +22,15 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { LineChart, Line, ResponsiveContainer, XAxis, YAxis } from "recharts"
+import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts"
 import { useAuth } from "@/contexts/auth-context"
 import { useSession } from "next-auth/react"
 import { ProfileMenu } from "@/components/profile-menu"
 import { statusToKey, statusToLabel, statusToBadgeVariant } from "@/lib/classroom-status"
 import { StatusChips } from "@/components/shared/status-chips"
 import { GradeBadge } from "@/components/shared/grade-badge"
+import { FullPageSkeleton } from "@/components/shared/full-page-skeleton"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 // Nota: Eliminado fallback de tareas mock. Solo se muestran tareas reales de Classroom.
 
@@ -72,12 +74,13 @@ export function StudentDashboard() {
   const { user, logout, switchRole } = useAuth()
   const router = useRouter()
   const { data: session, status: sessionStatus } = useSession()
+  const [bootstrapped, setBootstrapped] = useState(false)
 
   // Classroom live data state (student-focused)
   const [gcCourses, setGcCourses] = useState<Array<{ id?: string | null; name?: string | null }>>([])
   const [gcSelectedCourseId, setGcSelectedCourseId] = useState<string>("")
   const [gcMyUserId, setGcMyUserId] = useState<string>("")
-  const [gcCoursework, setGcCoursework] = useState<Array<{ id?: string | null; title?: string | null; dueDate?: any; dueTime?: any; maxPoints?: number | null }>>([])
+  const [gcCoursework, setGcCoursework] = useState<Array<{ id?: string | null; title?: string | null; dueDate?: any; maxPoints?: number | null }>>([])
   const [gcMyTasks, setGcMyTasks] = useState<Array<{ id: string; title: string; courseId: string; courseName: string; dueDate?: string; state?: string | null; late?: boolean | null; assignedGrade?: number | null; alternateLink?: string | null }>>([])
   const [gcLoading, setGcLoading] = useState(false)
   const [gcError, setGcError] = useState<string | null>(null)
@@ -97,6 +100,7 @@ export function StudentDashboard() {
         setGcMyTasks([])
         setGcCoursework([])
         setGcMyUserId("")
+        setBootstrapped(true)
       }
     } catch (e: any) {
       setGcError(e?.message || "No se pudieron cargar los cursos")
@@ -170,6 +174,7 @@ export function StudentDashboard() {
         setGcError(e?.message || "No se pudieron cargar tus tareas")
       } finally {
         setGcLoading(false)
+        setBootstrapped(true)
       }
     }
     run()
@@ -253,6 +258,10 @@ export function StudentDashboard() {
 
   const pendingCount = filteredTasks.filter((t) => !(t.state === "TURNED_IN" || t.state === "RETURNED" || t.state === "COMPLETED")).length
 
+  if (!bootstrapped || sessionStatus === "loading") {
+    return <FullPageSkeleton />
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
@@ -287,7 +296,7 @@ export function StudentDashboard() {
             <Button variant="ghost" size="sm" onClick={() => router.push("/notifications") }>
               <Bell className="h-4 w-4" />
             </Button>
-
+            <ThemeToggle />
             <ProfileMenu user={user} onLogout={() => logout()} />
           </div>
         </div>
@@ -516,15 +525,20 @@ export function StudentDashboard() {
           <CardContent>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={progressData}>
-                  <XAxis dataKey="week" axisLine={false} tickLine={false} />
-                  <YAxis hide />
+                <LineChart data={progressData} margin={{ left: 8, right: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                  <XAxis dataKey="week" axisLine={false} tickLine={false} stroke="var(--border)" tick={{ fill: 'var(--muted-foreground)' }} />
+                  <YAxis hide={false} stroke="var(--border)" tick={{ fill: 'var(--muted-foreground)' }} />
+                  <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--foreground)' }} labelStyle={{ color: 'var(--muted-foreground)' }} />
+                  <Legend wrapperStyle={{ color: 'var(--foreground)' }} />
                   <Line
                     type="monotone"
                     dataKey="progress"
+                    name="Progreso"
                     stroke="hsl(var(--primary))"
                     strokeWidth={3}
-                    dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 6 }}
+                    dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 5 }}
+                    activeDot={{ r: 7, stroke: "var(--foreground)", strokeWidth: 1 }}
                   />
                 </LineChart>
               </ResponsiveContainer>

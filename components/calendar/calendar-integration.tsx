@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Calendar, Clock, Users, MapPin, Video, CheckCircle, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -36,7 +36,7 @@ export interface CalendarEvent {
   status: "upcoming" | "ongoing" | "completed" | "cancelled"
 }
 
-// Mock calendar events data
+// Mock calendar events data (fallback)
 const mockEvents: CalendarEvent[] = [
   {
     id: "1",
@@ -125,13 +125,60 @@ const mockEvents: CalendarEvent[] = [
 ]
 
 export function CalendarIntegration() {
-  const [events, setEvents] = useState<CalendarEvent[]>(mockEvents)
+  const [events, setEvents] = useState<CalendarEvent[]>([])
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
   const [currentView, setCurrentView] = useState<"today" | "week" | "month">("today")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const now = new Date()
+        const timeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+        const timeMax = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30).toISOString()
+        const resp = await fetch(`/api/calendar/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`)
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        const data = await resp.json()
+        const mapped: CalendarEvent[] = (data.events || []).map((e: any) => ({
+          id: e.id,
+          title: e.summary,
+          description: e.description,
+          startTime: new Date(e.start),
+          endTime: new Date(e.end || e.start),
+          location: e.location || undefined,
+          meetingUrl: e.hangoutLink || undefined,
+          // Sin datos de profe/asistentes/cohorte/subject directos: usar placeholders razonables
+          teacher: { id: "google", name: "Google Calendar", email: "", avatar: undefined },
+          cohort: "",
+          subject: "Evento",
+          type: "class",
+          status: (new Date(e.start) > new Date() ? "upcoming" : (new Date(e.end || e.start) < new Date() ? "completed" : "ongoing")) as any,
+          attendees: (e.attendees || []).map((a: any, idx: number) => ({
+            id: String(idx),
+            name: a.displayName || a.email || "Invitado",
+            email: a.email || "",
+            avatar: undefined,
+            status: a.responseStatus === "accepted" ? "accepted" : a.responseStatus === "declined" ? "declined" : "pending",
+          })),
+        }))
+        setEvents(mapped)
+      } catch (e: any) {
+        setError(e?.message || "No se pudieron cargar los eventos")
+        setEvents([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
 
   const getTodayEvents = () => {
     const today = new Date()
-    return events.filter((event) => {
+    const source = events.length > 0 ? events : mockEvents
+    return source.filter((event) => {
       const eventDate = new Date(event.startTime)
       return (
         eventDate.getDate() === today.getDate() &&
@@ -143,7 +190,8 @@ export function CalendarIntegration() {
 
   const getUpcomingEvents = () => {
     const now = new Date()
-    return events
+    const source = events.length > 0 ? events : mockEvents
+    return source
       .filter((event) => event.startTime > now)
       .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
       .slice(0, 5)
@@ -250,6 +298,12 @@ export function CalendarIntegration() {
           <CardContent>
             <ScrollArea className="h-96">
               <div className="space-y-4">
+                {loading && (
+                  <div className="text-center py-8 text-muted-foreground">Cargando eventos...</div>
+                )}
+                {error && (
+                  <div className="text-center py-2 text-destructive text-sm">{error}</div>
+                )}
                 {getTodayEvents().length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">No hay clases programadas para hoy</div>
                 ) : (

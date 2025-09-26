@@ -20,7 +20,11 @@ import { StatusChips } from "@/components/shared/status-chips"
 import { GradeBadge } from "@/components/shared/grade-badge"
 import Link from "next/link"
 import { NotificationCenter } from "@/components/notifications/notification-center"
+import { ProfileMenu } from "@/components/profile-menu"
 import { CalendarIntegration } from "@/components/calendar/calendar-integration"
+import { UserAvatar } from "@/components/shared/user-avatar"
+import { FullPageSkeleton } from "@/components/shared/full-page-skeleton"
+import { ThemeToggle } from "@/components/theme-toggle"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -105,6 +109,7 @@ export function TeacherDashboard() {
   const { user, logout, switchRole } = useAuth()
   const router = useRouter()
   const { status: sessionStatus } = useSession()
+  const [bootstrapped, setBootstrapped] = useState(false)
 
   // Classroom live data state
   const [gcCourses, setGcCourses] = useState<Array<{ id?: string | null; name?: string | null }>>([])
@@ -133,6 +138,7 @@ export function TeacherDashboard() {
         setGcCoursework([])
         setGcSelectedWorkId("")
         setGcSubmissions([])
+        setBootstrapped(true)
       }
     } catch (e: any) {
       setGcError(e?.message || "No se pudieron cargar los cursos")
@@ -181,6 +187,7 @@ export function TeacherDashboard() {
         setGcError(e?.message || "No se pudieron cargar los alumnos/tareas")
       } finally {
         setGcLoading(false)
+        setBootstrapped(true)
       }
     }
     loadStudentsAndCoursework()
@@ -247,77 +254,8 @@ export function TeacherDashboard() {
             </Select>
 
             <NotificationCenter />
-
-            <Popover open={profileOpen} onOpenChange={setProfileOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="flex items-center gap-2 px-3"
-                  onClick={() => setProfileOpen((v) => !v)}
-                >
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={user?.avatar || "/placeholder.svg"} />
-                    <AvatarFallback>
-                      {user?.name
-                        ?.split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="hidden sm:inline-block">{user?.name}</span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-56">
-                <div className="px-3 py-2 flex items-center gap-2">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={user?.avatar || "/placeholder.svg"} />
-                    <AvatarFallback>
-                      {user?.name
-                        ?.split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{user?.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                  </div>
-                </div>
-                <div className="mx-1 my-1 h-px bg-border" />
-                <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/profile")}>
-                  <User className="mr-2 h-4 w-4" /> Mi Perfil
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start text-destructive"
-                  onClick={() => setLogoutOpen(true)}
-                >
-                  <LogOut className="mr-2 h-4 w-4" /> Cerrar Sesión
-                </Button>
-              </PopoverContent>
-            </Popover>
-            {/* Diálogo de confirmación fuera del Popover */}
-            <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>¿Cerrar sesión?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Se cerrará tu sesión actual y regresarás a la pantalla de inicio.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => {
-                      logout()
-                      router.replace("/")
-                    }}
-                  >
-                    Confirmar
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <ThemeToggle />
+            <ProfileMenu user={user!} onLogout={() => logout()} />
           </div>
         </div>
       </header>
@@ -547,15 +485,7 @@ export function TeacherDashboard() {
                             <TableRow key={s.userId || email}>
                               <TableCell>
                                 <div className="flex items-center gap-3">
-                                  <Avatar className="h-8 w-8">
-                                    <AvatarImage src={s.profile?.photoUrl || "/placeholder.svg"} />
-                                    <AvatarFallback>
-                                      {(fullName || "?")
-                                        .split(" ")
-                                        .map((n) => n[0])
-                                        .join("")}
-                                    </AvatarFallback>
-                                  </Avatar>
+                                  <UserAvatar name={fullName} email={email} photoUrl={s.profile?.photoUrl || null} size={32} />
                                   <span className="font-medium">{fullName}</span>
                                 </div>
                               </TableCell>
